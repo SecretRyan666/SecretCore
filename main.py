@@ -1,49 +1,6 @@
-전체코드로 주고 엑셀파일은 어디다 업로드해?
-
-좋아 라이언 🔥
-지금 두 가지를 정확히 정리해줄게.
-
-1️⃣ 엑셀(CSV) 파일 어디에 업로드하냐?
-2️⃣ main.py 전체 최종 통합 코드
-
-✅ 먼저: CSV 파일 어디에 업로드하냐?
-
-👉 서버에 미리 올리는 게 아니다.
-
-📌 업로드 위치는 여기다:
-Streamlit 웹앱 화면
-
-
-주소:
-
-https://appcore-aigqydsydpapbxcwwvhy4h.streamlit.app/
-
-
-로그인 후 화면에:
-
-📁 Upload Excel for Analysis
-
-
-여기에서 파일 선택하면 된다.
-
-⚠️ 중요한 것
-
-파일 확장자: .csv
-
-파일명: 시크릿데이타.csv
-
-컬럼 구조 고정 (우리가 맞춘 구조)
-
-서버에 따로 업로드할 필요 없다.
-웹에서 업로드 → API로 전송 → 서버에서 분석.
-
-🔥 이제 main.py 전체 최종 통합 코드
-
-👉 이 코드로 main.py 전체 교체해.
-
 import os
 from datetime import datetime, timedelta
-from io import StringIO
+from io import StringIO, BytesIO
 
 import pandas as pd
 from fastapi import FastAPI, Depends, HTTPException, status, File, UploadFile
@@ -55,6 +12,10 @@ from sqlalchemy.orm import Session
 from database import engine, SessionLocal
 from models import Base, User, AnalysisRecord
 
+# =========================
+# 🔐 SECURITY CONFIG
+# =========================
+
 SECRET_KEY = os.getenv("SECRET_KEY", "local_dev_secret_key")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
@@ -65,7 +26,10 @@ Base.metadata.create_all(bind=engine)
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
-# ================= DB =================
+# =========================
+# 🗄 DATABASE
+# =========================
+
 def get_db():
     db = SessionLocal()
     try:
@@ -73,14 +37,20 @@ def get_db():
     finally:
         db.close()
 
-# ================= PASSWORD =================
+# =========================
+# 🔑 PASSWORD
+# =========================
+
 def hash_password(password: str):
     return pwd_context.hash(password)
 
 def verify_password(plain_password, hashed_password):
     return pwd_context.verify(plain_password, hashed_password)
 
-# ================= JWT =================
+# =========================
+# 🔐 JWT
+# =========================
+
 def create_access_token(data: dict, expires_delta: timedelta = None):
     to_encode = data.copy()
     expire = datetime.utcnow() + (
@@ -89,9 +59,10 @@ def create_access_token(data: dict, expires_delta: timedelta = None):
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
-def get_current_user(token: str = Depends(oauth2_scheme),
-                     db: Session = Depends(get_db)):
-
+def get_current_user(
+    token: str = Depends(oauth2_scheme),
+    db: Session = Depends(get_db)
+):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Invalid authentication",
@@ -112,16 +83,27 @@ def get_current_user(token: str = Depends(oauth2_scheme),
 
     return user
 
-# ================= SECRET ENGINE =================
+# =========================
+# 🧠 SECRET ENGINE
+# =========================
 
 def create_key(row):
     return f"{row['유형']}|{row['일반구분']}|{row['핸디구분']}|{row['정역']}|{row['홈원정']}"
 
 def generate_bar(percent):
-    filled = int(percent / 5)
+    filled = int(percent / 5)  # 20칸 기준
     return "█" * filled + "-" * (20 - filled)
 
 def secret_engine(df):
+
+    required_columns = [
+        "유형", "일반구분", "핸디구분",
+        "정역", "홈원정", "결과"
+    ]
+
+    for col in required_columns:
+        if col not in df.columns:
+            raise Exception(f"Missing required column: {col}")
 
     df["KEY"] = df.apply(create_key, axis=1)
 
@@ -142,6 +124,7 @@ def secret_engine(df):
         sample = group.iloc[0]
         signal = None
 
+        # 🔥 위험 조건
         if (
             sample["일반구분"] == "A"
             and sample["정역"] == "역"
@@ -150,6 +133,7 @@ def secret_engine(df):
         ):
             signal = "⚠ 핸디 붕괴 고위험"
 
+        # 🔥 무 시그널
         if (
             sample["일반구분"] == "A"
             and sample["정역"] == "정"
@@ -168,15 +152,20 @@ def secret_engine(df):
 
     return results
 
-# ================= ROUTES =================
+# =========================
+# 🌐 ROUTES
+# =========================
 
 @app.get("/")
 def root():
     return {"message": "SecretCore Service Running"}
 
+# 로그인
 @app.post("/login")
-def login(form_data: OAuth2PasswordRequestForm = Depends(),
-          db: Session = Depends(get_db)):
+def login(
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db: Session = Depends(get_db)
+):
 
     user = db.query(User).filter(
         User.username == form_data.username
@@ -197,31 +186,46 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(),
 
     return {"access_token": access_token, "token_type": "bearer"}
 
+# 파일 분석 (CSV + Excel 지원)
 @app.post("/analyze")
-def analyze_csv(
+def analyze_file(
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
 
-    contents = file.file.read().decode("utf-8")
-    df = pd.read_csv(StringIO(contents))
+    try:
+        filename = file.filename.lower()
 
-    engine_result = secret_engine(df)
+        if filename.endswith(".csv"):
+            contents = file.file.read().decode("utf-8")
+            df = pd.read_csv(StringIO(contents))
 
-    record = AnalysisRecord(
-        filename=file.filename,
-        total_rows=len(df),
-        total_columns=len(df.columns),
-        columns=", ".join(df.columns),
-        owner=current_user
-    )
+        elif filename.endswith(".xlsx") or filename.endswith(".xls"):
+            contents = file.file.read()
+            df = pd.read_excel(BytesIO(contents))
 
-    db.add(record)
-    db.commit()
+        else:
+            raise HTTPException(status_code=400, detail="Unsupported file type")
 
-    return {
-        "message": "Secret analysis complete",
-        "group_count": len(engine_result),
-        "analysis_preview": engine_result[:10]
-    }
+        engine_result = secret_engine(df)
+
+        record = AnalysisRecord(
+            filename=file.filename,
+            total_rows=len(df),
+            total_columns=len(df.columns),
+            columns=", ".join(df.columns),
+            owner=current_user
+        )
+
+        db.add(record)
+        db.commit()
+
+        return {
+            "message": "Secret analysis complete",
+            "group_count": len(engine_result),
+            "analysis_preview": engine_result[:10]
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
