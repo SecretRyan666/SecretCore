@@ -10,7 +10,7 @@ from passlib.context import CryptContext
 from sqlalchemy.orm import Session
 
 from database import engine, SessionLocal
-from models import Base, User
+from models import Base, User, AnalysisRecord
 
 # =========================
 # 🔐 SECURITY CONFIG
@@ -237,33 +237,62 @@ def approve_user(
     return {"message": f"{target_username} approved successfully"}
 
 # =========================
-# 📊 EXCEL ANALYSIS API
+# 📊 EXCEL ANALYSIS API (DB 저장)
 # =========================
 
 @app.post("/analyze")
 def analyze_excel(
     file: UploadFile = File(...),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
 ):
     try:
         contents = file.file.read()
         df = pd.read_excel(BytesIO(contents))
 
-        # 🔥 기본 분석 예시
         total_rows = len(df)
         total_columns = len(df.columns)
 
-        summary = {
-            "filename": file.filename,
-            "total_rows": total_rows,
-            "total_columns": total_columns,
-            "columns": list(df.columns),
-        }
+        new_record = AnalysisRecord(
+            filename=file.filename,
+            total_rows=total_rows,
+            total_columns=total_columns,
+            columns=", ".join(df.columns),
+            owner=current_user
+        )
+
+        db.add(new_record)
+        db.commit()
 
         return {
-            "user": current_user.username,
-            "analysis": summary
+            "message": "Analysis saved successfully",
+            "filename": file.filename,
+            "rows": total_rows,
+            "columns": total_columns
         }
 
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+# =========================
+# 📜 사용자 분석 기록 조회
+# =========================
+
+@app.get("/my-analyses")
+def get_my_analyses(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    records = db.query(AnalysisRecord).filter(
+        AnalysisRecord.user_id == current_user.id
+    ).all()
+
+    return [
+        {
+            "filename": r.filename,
+            "rows": r.total_rows,
+            "columns": r.total_columns,
+            "created_at": r.created_at
+        }
+        for r in records
+    ]
