@@ -84,6 +84,25 @@ def get_current_user(
     return user
 
 # =========================
+# 👑 고정 관리자 자동 생성
+# =========================
+
+@app.on_event("startup")
+def create_fixed_admin():
+    db = SessionLocal()
+    admin = db.query(User).filter(User.username == "admin").first()
+    if not admin:
+        admin_user = User(
+            username="admin",
+            password=hash_password("admin123"),
+            is_admin=True,
+            is_approved=True
+        )
+        db.add(admin_user)
+        db.commit()
+    db.close()
+
+# =========================
 # 🧠 SECRET ENGINE
 # =========================
 
@@ -124,7 +143,6 @@ def secret_engine(df):
         sample = group.iloc[0]
         signal = None
 
-        # 🔥 붕괴 위험
         if (
             sample["일반구분"] == "A"
             and sample["정역"] == "역"
@@ -133,7 +151,6 @@ def secret_engine(df):
         ):
             signal = "⚠ 핸디 붕괴 고위험"
 
-        # 🎯 무 시그널
         if (
             sample["일반구분"] == "A"
             and sample["정역"] == "정"
@@ -160,7 +177,6 @@ def secret_engine(df):
 def root():
     return {"message": "SecretCore Service Running"}
 
-# 회원가입
 @app.post("/register")
 def register(username: str, password: str, db: Session = Depends(get_db)):
     existing_user = db.query(User).filter(User.username == username).first()
@@ -179,7 +195,6 @@ def register(username: str, password: str, db: Session = Depends(get_db)):
 
     return {"message": "User registered. Wait for approval."}
 
-# 로그인
 @app.post("/login")
 def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
@@ -205,7 +220,6 @@ def login(
 
     return {"access_token": access_token, "token_type": "bearer"}
 
-# 내 정보
 @app.get("/users/me")
 def read_users_me(current_user: User = Depends(get_current_user)):
     return {
@@ -213,7 +227,6 @@ def read_users_me(current_user: User = Depends(get_current_user)):
         "is_admin": current_user.is_admin
     }
 
-# 파일 분석
 @app.post("/analyze")
 def analyze_file(
     file: UploadFile = File(...),
@@ -257,7 +270,6 @@ def analyze_file(
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-# 내 분석 기록
 @app.get("/my-analyses")
 def get_my_analyses(
     current_user: User = Depends(get_current_user),
