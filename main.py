@@ -84,22 +84,29 @@ def get_current_user(
     return user
 
 # =========================
-# 👑 고정 관리자 자동 생성
+# 👑 관리자 강제 고정 생성 + 승인
 # =========================
 
 @app.on_event("startup")
-def create_fixed_admin():
+def force_admin_account():
     db = SessionLocal()
+
     admin = db.query(User).filter(User.username == "admin").first()
+
     if not admin:
-        admin_user = User(
+        admin = User(
             username="admin",
             password=hash_password("admin123"),
             is_admin=True,
             is_approved=True
         )
-        db.add(admin_user)
-        db.commit()
+        db.add(admin)
+    else:
+        admin.is_admin = True
+        admin.is_approved = True
+        admin.password = hash_password("admin123")
+
+    db.commit()
     db.close()
 
 # =========================
