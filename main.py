@@ -13,7 +13,7 @@ from database import engine, SessionLocal
 from models import Base, User, AnalysisRecord
 
 # =========================
-# 🔐 SECURITY CONFIG
+# 🔐 CONFIG
 # =========================
 
 SECRET_KEY = os.getenv("SECRET_KEY", "local_dev_secret_key")
@@ -91,7 +91,7 @@ def create_key(row):
     return f"{row['유형']}|{row['일반구분']}|{row['핸디구분']}|{row['정역']}|{row['홈원정']}"
 
 def generate_bar(percent):
-    filled = int(percent / 5)  # 20칸 기준
+    filled = int(percent / 5)
     return "█" * filled + "-" * (20 - filled)
 
 def secret_engine(df):
@@ -124,7 +124,7 @@ def secret_engine(df):
         sample = group.iloc[0]
         signal = None
 
-        # 🔥 위험 조건
+        # 🔥 붕괴 위험
         if (
             sample["일반구분"] == "A"
             and sample["정역"] == "역"
@@ -133,7 +133,7 @@ def secret_engine(df):
         ):
             signal = "⚠ 핸디 붕괴 고위험"
 
-        # 🔥 무 시그널
+        # 🎯 무 시그널
         if (
             sample["일반구분"] == "A"
             and sample["정역"] == "정"
@@ -159,6 +159,25 @@ def secret_engine(df):
 @app.get("/")
 def root():
     return {"message": "SecretCore Service Running"}
+
+# 회원가입
+@app.post("/register")
+def register(username: str, password: str, db: Session = Depends(get_db)):
+    existing_user = db.query(User).filter(User.username == username).first()
+    if existing_user:
+        raise HTTPException(status_code=400, detail="Username already exists")
+
+    user = User(
+        username=username,
+        password=hash_password(password),
+        is_approved=False,
+        is_admin=False
+    )
+
+    db.add(user)
+    db.commit()
+
+    return {"message": "User registered. Wait for approval."}
 
 # 로그인
 @app.post("/login")
@@ -186,7 +205,15 @@ def login(
 
     return {"access_token": access_token, "token_type": "bearer"}
 
-# 파일 분석 (CSV + Excel 지원)
+# 내 정보
+@app.get("/users/me")
+def read_users_me(current_user: User = Depends(get_current_user)):
+    return {
+        "username": current_user.username,
+        "is_admin": current_user.is_admin
+    }
+
+# 파일 분석
 @app.post("/analyze")
 def analyze_file(
     file: UploadFile = File(...),
@@ -229,3 +256,24 @@ def analyze_file(
 
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+# 내 분석 기록
+@app.get("/my-analyses")
+def get_my_analyses(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+
+    records = db.query(AnalysisRecord).filter(
+        AnalysisRecord.user_id == current_user.id
+    ).all()
+
+    return [
+        {
+            "filename": r.filename,
+            "rows": r.total_rows,
+            "columns": r.total_columns,
+            "created_at": r.created_at
+        }
+        for r in records
+    ]
