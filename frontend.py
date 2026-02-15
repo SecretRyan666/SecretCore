@@ -1,7 +1,8 @@
 import streamlit as st
 import requests
 
-API_URL = "http://127.0.0.1:8000"
+# 🔥 프로덕션 API 주소
+API_URL = "https://secretcore.onrender.com"
 
 st.set_page_config(page_title="SecretCore", page_icon="🔐")
 st.title("🔐 SecretCore Web App")
@@ -61,7 +62,6 @@ if "token" in st.session_state:
 
         if st.button("Logout"):
             del st.session_state.token
-            st.success("Logged out")
             st.rerun()
 
         st.markdown("---")
@@ -90,7 +90,7 @@ if "token" in st.session_state:
 
                 if users:
                     for user in users:
-                        col1, col2 = st.columns([3,1])
+                        col1, col2 = st.columns([3, 1])
                         col1.write(user["username"])
                         if col2.button("✅ Approve", key=user["username"]):
                             requests.post(
