@@ -1,19 +1,3 @@
-좋아 라이언 👍
-지금 상황 정확히 정리해보자.
-
-👉 Streamlit 주소에서 테스트 중
-👉 CSV는 업로드 자체가 안 됨
-👉 Excel은 업로드는 되는데 “찾지를 못한다”는 에러
-
-이건 프론트엔드(frontend.py)가 아직 CSV/XLSX 둘 다 지원하도록 수정되지 않았을 가능성이 거의 100%다.
-
-지금 백엔드는 둘 다 지원하는데
-프론트가 아직 type=["xlsx"]로만 제한돼 있을 가능성이 크다.
-
-🔥 1️⃣ frontend.py 전체 교체 (CSV + Excel 지원)
-
-Streamlit 쪽 frontend.py를 아래 코드로 통째로 교체해.
-
 import streamlit as st
 import requests
 
