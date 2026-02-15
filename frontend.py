@@ -6,48 +6,73 @@ API_URL = "https://secretcore.onrender.com"
 st.set_page_config(page_title="SecretCore", page_icon="🔐")
 st.title("🔐 SecretCore Web App")
 
+# =========================
+# SESSION INIT
+# =========================
+if "token" not in st.session_state:
+    st.session_state.token = None
+
+# =========================
+# SIDEBAR MENU
+# =========================
 menu = ["Login", "Register"]
 choice = st.sidebar.selectbox("Menu", menu)
 
-# ================= REGISTER =================
+# =========================
+# REGISTER
+# =========================
 if choice == "Register":
+
     st.subheader("Create Account")
 
     username = st.text_input("Username")
     password = st.text_input("Password", type="password")
 
     if st.button("Register"):
+
         response = requests.post(
             f"{API_URL}/register",
             params={"username": username, "password": password},
         )
 
-        if response.status_code == 200:
-            st.success("Registered. Wait for admin approval.")
-        else:
-            st.error(response.json().get("detail"))
+        st.write("Status:", response.status_code)
+        st.write("Response:", response.text)
 
-# ================= LOGIN =================
+        if response.status_code == 200:
+            st.success("Registered. Admin approval required.")
+        else:
+            st.error("Registration failed")
+
+# =========================
+# LOGIN
+# =========================
 if choice == "Login":
+
     st.subheader("Login")
 
     username = st.text_input("Username")
     password = st.text_input("Password", type="password")
 
     if st.button("Login"):
+
         response = requests.post(
             f"{API_URL}/login",
             data={"username": username, "password": password},
         )
 
+        st.write("Status:", response.status_code)
+        st.write("Response:", response.text)
+
         if response.status_code == 200:
             st.session_state.token = response.json()["access_token"]
             st.success("Login successful")
         else:
-            st.error(response.json().get("detail"))
+            st.error("Login failed")
 
-# ================= AUTHORIZED =================
-if "token" in st.session_state:
+# =========================
+# AUTHORIZED AREA
+# =========================
+if st.session_state.token:
 
     headers = {"Authorization": f"Bearer {st.session_state.token}"}
 
@@ -60,7 +85,11 @@ if "token" in st.session_state:
     )
 
     if uploaded_file is not None:
+
         if st.button("Analyze"):
+
+            st.write("Analyze button clicked")
+
             response = requests.post(
                 f"{API_URL}/analyze",
                 headers=headers,
@@ -73,12 +102,18 @@ if "token" in st.session_state:
                 }
             )
 
+            st.write("Status Code:", response.status_code)
+            st.write("Raw Response:", response.text)
+
             if response.status_code == 200:
                 st.success("Analysis completed")
                 st.json(response.json())
             else:
-                st.error(response.text)
+                st.error("Analysis failed")
 
+    # =========================
+    # HISTORY
+    # =========================
     st.markdown("---")
     st.subheader("📜 My Analysis History")
 
@@ -86,6 +121,8 @@ if "token" in st.session_state:
         f"{API_URL}/my-analyses",
         headers=headers
     )
+
+    st.write("History Status:", history.status_code)
 
     if history.status_code == 200:
         records = history.json()
@@ -99,3 +136,13 @@ if "token" in st.session_state:
                 )
         else:
             st.write("No history yet.")
+    else:
+        st.error("History load failed")
+
+# =========================
+# LOGOUT
+# =========================
+if st.session_state.token:
+    if st.sidebar.button("Logout"):
+        st.session_state.token = None
+        st.success("Logged out")
