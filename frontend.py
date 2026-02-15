@@ -1,7 +1,6 @@
 import streamlit as st
 import requests
 
-# 🔥 프로덕션 API 주소
 API_URL = "https://secretcore.onrender.com"
 
 st.set_page_config(page_title="SecretCore", page_icon="🔐")
@@ -47,7 +46,9 @@ if choice == "Login":
         else:
             st.error(response.json().get("detail"))
 
+# ================= AUTHORIZED AREA =================
 if "token" in st.session_state:
+
     headers = {"Authorization": f"Bearer {st.session_state.token}"}
 
     user_info = requests.get(f"{API_URL}/users/me", headers=headers)
@@ -64,40 +65,42 @@ if "token" in st.session_state:
             del st.session_state.token
             st.rerun()
 
+        # ================= FILE UPLOAD =================
         st.markdown("---")
-        st.subheader("🔑 Change Password")
-        new_pw = st.text_input("New Password", type="password")
+        st.subheader("📁 Upload Excel for Analysis")
 
-        if st.button("Update Password"):
-            response = requests.post(
-                f"{API_URL}/change-password",
-                headers=headers,
-                params={"new_password": new_pw},
-            )
-            if response.status_code == 200:
-                st.success("Password updated")
-            else:
-                st.error("Error updating password")
+        uploaded_file = st.file_uploader("Choose Excel file", type=["xlsx"])
 
-        if data["is_admin"]:
-            st.markdown("---")
-            st.markdown("### 👑 Admin Panel")
+        if uploaded_file is not None:
+            if st.button("Analyze"):
+                files = {"file": uploaded_file.getvalue()}
 
-            pending = requests.get(f"{API_URL}/admin/pending", headers=headers)
+                response = requests.post(
+                    f"{API_URL}/analyze",
+                    headers=headers,
+                    files={"file": (uploaded_file.name, uploaded_file, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}
+                )
 
-            if pending.status_code == 200:
-                users = pending.json()
-
-                if users:
-                    for user in users:
-                        col1, col2 = st.columns([3, 1])
-                        col1.write(user["username"])
-                        if col2.button("✅ Approve", key=user["username"]):
-                            requests.post(
-                                f"{API_URL}/admin/approve/{user['username']}",
-                                headers=headers,
-                            )
-                            st.success(f"{user['username']} approved")
-                            st.rerun()
+                if response.status_code == 200:
+                    st.success("Analysis completed and saved.")
+                    st.json(response.json())
                 else:
-                    st.write("No pending users.")
+                    st.error(response.json().get("detail"))
+
+        # ================= MY ANALYSES =================
+        st.markdown("---")
+        st.subheader("📜 My Analysis History")
+
+        history = requests.get(f"{API_URL}/my-analyses", headers=headers)
+
+        if history.status_code == 200:
+            records = history.json()
+
+            if records:
+                for record in records:
+                    st.write(
+                        f"📄 {record['filename']} | Rows: {record['rows']} | "
+                        f"Columns: {record['columns']} | Date: {record['created_at']}"
+                    )
+            else:
+                st.write("No analysis history yet.")
