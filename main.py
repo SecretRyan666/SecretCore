@@ -1,27 +1,27 @@
 import os
-from fastapi import FastAPI, Depends, HTTPException, status
+from datetime import datetime, timedelta
+from io import BytesIO
+
+import pandas as pd
+from fastapi import FastAPI, Depends, HTTPException, status, File, UploadFile
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from jose import JWTError, jwt
+from passlib.context import CryptContext
 from sqlalchemy.orm import Session
+
 from database import engine, SessionLocal
 from models import Base, User
-from passlib.context import CryptContext
-from jose import JWTError, jwt
-from datetime import datetime, timedelta
 
 # =========================
 # 🔐 SECURITY CONFIG
 # =========================
 
-SECRET_KEY = os.getenv("SECRET_KEY")
-
-if not SECRET_KEY:
-    raise ValueError("SECRET_KEY environment variable is not set")
-
+SECRET_KEY = os.getenv("SECRET_KEY", "local_dev_secret_key")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
 
 # =========================
-# APP INIT
+# 🚀 APP INIT
 # =========================
 
 app = FastAPI()
@@ -31,7 +31,7 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
 # =========================
-# DATABASE
+# 🗄 DATABASE
 # =========================
 
 def get_db():
@@ -42,7 +42,7 @@ def get_db():
         db.close()
 
 # =========================
-# PASSWORD
+# 🔑 PASSWORD
 # =========================
 
 def hash_password(password: str):
@@ -52,7 +52,7 @@ def verify_password(plain_password, hashed_password):
     return pwd_context.verify(plain_password, hashed_password)
 
 # =========================
-# JWT
+# 🔐 JWT
 # =========================
 
 def create_access_token(data: dict, expires_delta: timedelta = None):
@@ -88,7 +88,7 @@ def get_current_user(
     return user
 
 # =========================
-# ADMIN AUTO CREATE
+# 👑 ADMIN AUTO CREATE
 # =========================
 
 @app.on_event("startup")
@@ -109,12 +109,16 @@ def create_admin():
     db.close()
 
 # =========================
-# ROUTES
+# 🌐 ROUTES
 # =========================
 
 @app.get("/")
 def root():
     return {"message": "SecretCore Service Running"}
+
+# -------------------------
+# 회원가입
+# -------------------------
 
 @app.post("/register")
 def register(username: str, password: str, db: Session = Depends(get_db)):
@@ -133,6 +137,10 @@ def register(username: str, password: str, db: Session = Depends(get_db)):
     db.commit()
 
     return {"message": "Registered. Waiting for admin approval."}
+
+# -------------------------
+# 로그인
+# -------------------------
 
 @app.post("/login")
 def login(
@@ -162,12 +170,20 @@ def login(
         "token_type": "bearer"
     }
 
+# -------------------------
+# 내 정보
+# -------------------------
+
 @app.get("/users/me")
 def read_users_me(current_user: User = Depends(get_current_user)):
     return {
         "username": current_user.username,
         "is_admin": current_user.is_admin
     }
+
+# -------------------------
+# 비밀번호 변경
+# -------------------------
 
 @app.post("/change-password")
 def change_password(
@@ -179,6 +195,10 @@ def change_password(
     db.commit()
     return {"message": "Password updated successfully"}
 
+# -------------------------
+# 승인 대기 목록
+# -------------------------
+
 @app.get("/admin/pending")
 def get_pending_users(
     current_user: User = Depends(get_current_user),
@@ -188,8 +208,11 @@ def get_pending_users(
         raise HTTPException(status_code=403, detail="Admin access required")
 
     users = db.query(User).filter(User.is_approved == False).all()
-
     return [{"username": user.username} for user in users]
+
+# -------------------------
+# 사용자 승인
+# -------------------------
 
 @app.post("/admin/approve/{target_username}")
 def approve_user(
@@ -212,3 +235,35 @@ def approve_user(
     db.commit()
 
     return {"message": f"{target_username} approved successfully"}
+
+# =========================
+# 📊 EXCEL ANALYSIS API
+# =========================
+
+@app.post("/analyze")
+def analyze_excel(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user)
+):
+    try:
+        contents = file.file.read()
+        df = pd.read_excel(BytesIO(contents))
+
+        # 🔥 기본 분석 예시
+        total_rows = len(df)
+        total_columns = len(df.columns)
+
+        summary = {
+            "filename": file.filename,
+            "total_rows": total_rows,
+            "total_columns": total_columns,
+            "columns": list(df.columns),
+        }
+
+        return {
+            "user": current_user.username,
+            "analysis": summary
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
