@@ -1,3 +1,46 @@
+전체코드로 주고 엑셀파일은 어디다 업로드해?
+
+좋아 라이언 🔥
+지금 두 가지를 정확히 정리해줄게.
+
+1️⃣ 엑셀(CSV) 파일 어디에 업로드하냐?
+2️⃣ main.py 전체 최종 통합 코드
+
+✅ 먼저: CSV 파일 어디에 업로드하냐?
+
+👉 서버에 미리 올리는 게 아니다.
+
+📌 업로드 위치는 여기다:
+Streamlit 웹앱 화면
+
+
+주소:
+
+https://appcore-aigqydsydpapbxcwwvhy4h.streamlit.app/
+
+
+로그인 후 화면에:
+
+📁 Upload Excel for Analysis
+
+
+여기에서 파일 선택하면 된다.
+
+⚠️ 중요한 것
+
+파일 확장자: .csv
+
+파일명: 시크릿데이타.csv
+
+컬럼 구조 고정 (우리가 맞춘 구조)
+
+서버에 따로 업로드할 필요 없다.
+웹에서 업로드 → API로 전송 → 서버에서 분석.
+
+🔥 이제 main.py 전체 최종 통합 코드
+
+👉 이 코드로 main.py 전체 교체해.
+
 import os
 from datetime import datetime, timedelta
 from io import StringIO
@@ -83,7 +126,6 @@ def secret_engine(df):
     df["KEY"] = df.apply(create_key, axis=1)
 
     results = []
-
     grouped = df.groupby("KEY")
 
     for key, group in grouped:
@@ -97,12 +139,31 @@ def secret_engine(df):
         draw_p = round(draw / total * 100, 2)
         lose_p = round(lose / total * 100, 2)
 
+        sample = group.iloc[0]
+        signal = None
+
+        if (
+            sample["일반구분"] == "A"
+            and sample["정역"] == "역"
+            and sample["홈원정"] == "홈"
+            and sample["핸디구분"] in ["B", "C"]
+        ):
+            signal = "⚠ 핸디 붕괴 고위험"
+
+        if (
+            sample["일반구분"] == "A"
+            and sample["정역"] == "정"
+            and sample["핸디구분"] in ["D", "E-C", "G"]
+        ):
+            signal = "🎯 핸디무 시그널"
+
         results.append({
             "KEY": key,
             "total": total,
-            "승": f"{generate_bar(win_p)} {win_p}%",
-            "무": f"{generate_bar(draw_p)} {draw_p}%",
-            "패": f"{generate_bar(lose_p)} {lose_p}%"
+            "승": f"{generate_bar(win_p)} {win_p}% ({win})",
+            "무": f"{generate_bar(draw_p)} {draw_p}% ({draw})",
+            "패": f"{generate_bar(lose_p)} {lose_p}% ({lose})",
+            "signal": signal
         })
 
     return results
@@ -143,28 +204,24 @@ def analyze_csv(
     db: Session = Depends(get_db)
 ):
 
-    try:
-        contents = file.file.read().decode("utf-8")
-        df = pd.read_csv(StringIO(contents))
+    contents = file.file.read().decode("utf-8")
+    df = pd.read_csv(StringIO(contents))
 
-        engine_result = secret_engine(df)
+    engine_result = secret_engine(df)
 
-        record = AnalysisRecord(
-            filename=file.filename,
-            total_rows=len(df),
-            total_columns=len(df.columns),
-            columns=", ".join(df.columns),
-            owner=current_user
-        )
+    record = AnalysisRecord(
+        filename=file.filename,
+        total_rows=len(df),
+        total_columns=len(df.columns),
+        columns=", ".join(df.columns),
+        owner=current_user
+    )
 
-        db.add(record)
-        db.commit()
+    db.add(record)
+    db.commit()
 
-        return {
-            "message": "Secret analysis complete",
-            "result_count": len(engine_result),
-            "analysis": engine_result[:10]
-        }
-
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    return {
+        "message": "Secret analysis complete",
+        "group_count": len(engine_result),
+        "analysis_preview": engine_result[:10]
+    }
