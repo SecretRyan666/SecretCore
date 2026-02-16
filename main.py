@@ -31,7 +31,6 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 600
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
-
 FAKE_USER = {"username": "admin", "password": "1234"}
 
 def create_token(data: dict):
@@ -178,6 +177,13 @@ def ultimate(year:int, round_no:str, match_no:int,
     ev_dict = {"승":ev_w,"무":ev_d,"패":ev_l}
     best = max(ev_dict, key=ev_dict.get)
 
+    # 시크릿 분석
+    secret = ""
+    if row["일반구분"]=="A" and draw_p >= 30:
+        secret = "🎯 무 시그널"
+    if row["핸디구분"] in ["B","C"] and lose_p >= 50:
+        secret = "⚠ 핸디 붕괴 위험"
+
     score = max(win_p, draw_p, lose_p)
     grade = ai_grade(score)
 
@@ -191,7 +197,8 @@ def ultimate(year:int, round_no:str, match_no:int,
         },
         "EV":{k:round(v,3) for k,v in ev_dict.items()},
         "AI등급": grade,
-        "추천": best
+        "추천": best,
+        "시크릿분석": secret
     }
 
 # =====================================================
@@ -213,9 +220,8 @@ def team_scan(team:str, home_away:str,
         raise HTTPException(404)
 
     result = {}
-
-    for game_type in ["일반","핸디1"]:
-        sub = team_df[team_df["유형"]==game_type]
+    for gtype in ["일반","핸디1"]:
+        sub = team_df[team_df["유형"]==gtype]
         if sub.empty:
             continue
 
@@ -223,18 +229,11 @@ def team_scan(team:str, home_away:str,
         vc = sub["결과"].value_counts()
 
         win = vc.get("승",0)
-        draw = vc.get("무",0)
-        lose = vc.get("패",0)
-
         win_p = win/total*100 if total else 0
-        draw_p = draw/total*100 if total else 0
-        lose_p = lose/total*100 if total else 0
 
-        result[game_type] = {
+        result[gtype] = {
             "총": total,
-            "승": f"{bar(win_p)} {round(win_p,2)}%",
-            "무": f"{bar(draw_p)} {round(draw_p,2)}%",
-            "패": f"{bar(lose_p)} {round(lose_p,2)}%"
+            "승": f"{bar(win_p)} {round(win_p,2)}%"
         }
 
     return result
@@ -257,18 +256,11 @@ def odds_scan(odds:float,
     vc = sub["결과"].value_counts()
 
     win = vc.get("승",0)
-    draw = vc.get("무",0)
-    lose = vc.get("패",0)
-
     win_p = win/total*100 if total else 0
-    draw_p = draw/total*100 if total else 0
-    lose_p = lose/total*100 if total else 0
 
     return {
         "총": total,
-        "승": f"{bar(win_p)} {round(win_p,2)}%",
-        "무": f"{bar(draw_p)} {round(draw_p,2)}%",
-        "패": f"{bar(lose_p)} {round(lose_p,2)}%"
+        "승": f"{bar(win_p)} {round(win_p,2)}%"
     }
 
 # =====================================================
@@ -285,56 +277,11 @@ def home():
         <style>
             body {background:#0f0f0f;color:white;font-family:Arial;margin:0;padding:20px;}
             h1 {color:#00ffcc;text-align:center;}
-
-            .card {
-                background:#1c1c1c;
-                padding:15px;
-                margin-bottom:15px;
-                border-radius:14px;
-                box-shadow:0 0 12px rgba(0,255,204,0.3);
-            }
-
-            .row {
-                display:flex;
-                justify-content:space-between;
-                align-items:center;
-            }
-
-            .left {font-size:12px;color:#aaa;}
-            .center {font-size:18px;font-weight:bold;color:#00ffcc;}
-            .info-btn {
-                background:#00ffcc;
-                border:none;
-                border-radius:8px;
-                padding:6px 10px;
-                font-weight:bold;
-                color:black;
-                cursor:pointer;
-            }
-
-            .detail {
-                margin-top:10px;
-                padding:10px;
-                background:#111;
-                border-radius:10px;
-                display:none;
-            }
-
-            .section-title {
-                margin-top:10px;
-                font-weight:bold;
-                color:#00ffcc;
-            }
-
-            button {
-                padding:10px;
-                border:none;
-                border-radius:8px;
-                background:#00ffcc;
-                color:black;
-                font-weight:bold;
-                margin-bottom:15px;
-            }
+            .card {background:#1c1c1c;padding:15px;margin-bottom:15px;border-radius:14px;}
+            .row {display:flex;justify-content:space-between;align-items:center;}
+            .info-btn {background:#00ffcc;border:none;border-radius:8px;padding:6px 10px;font-weight:bold;}
+            .detail {margin-top:10px;padding:10px;background:#111;border-radius:10px;display:none;}
+            button {padding:10px;border:none;border-radius:8px;background:#00ffcc;color:black;font-weight:bold;margin-bottom:15px;}
         </style>
     </head>
     <body>
@@ -351,46 +298,30 @@ def home():
             let form = new URLSearchParams();
             form.append("username","admin");
             form.append("password","1234");
-
-            let res = await fetch("/login",{
-                method:"POST",
-                headers:{"Content-Type":"application/x-www-form-urlencoded"},
-                body:form
-            });
-
+            let res = await fetch("/login",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:form});
             let data = await res.json();
             token = data.access_token;
             localStorage.setItem("token",token);
         }
 
         async function loadMatches(){
-
-            if(!token){
-                await autoLogin();
-            }
-
-            let res = await fetch("/matches",{
-                headers:{ "Authorization":"Bearer "+token }
-            });
-
+            if(!token){ await autoLogin(); }
+            let res = await fetch("/matches",{headers:{ "Authorization":"Bearer "+token }});
             let data = await res.json();
             let html="";
-
             data.forEach((m,index)=>{
                 html+=`
                 <div class="card">
                     <div class="row">
                         <div>
-                            <div class="left">${m.유형} | ${m.년도} ${m.회차}</div>
-                            <div><b>${m.홈팀}</b> vs <b>${m.원정팀}</b></div>
+                            ${m.유형} | ${m.년도} ${m.회차}<br>
+                            <b>${m.홈팀}</b> vs <b>${m.원정팀}</b>
                         </div>
-                        <div class="center" id="recommend_${index}">추천</div>
-                        <button class="info-btn" onclick="toggleDetail(${index},${m.년도},'${m.회차}',${m.순번})">정보</button>
+                        <button class="info-btn" onclick="toggleDetail(${index},${m.년도},'${m.회차}',${m.순번})">i</button>
                     </div>
                     <div class="detail" id="detail_${index}"></div>
                 </div>`;
             });
-
             document.getElementById("matches").innerHTML=html;
         }
 
@@ -403,30 +334,16 @@ def home():
                 return;
             }
 
-            let res = await fetch(
-                `/ultimate-analysis?year=${year}&round_no=${round_no}&match_no=${match_no}`,
-                { headers:{ "Authorization":"Bearer "+token } }
-            );
-
+            let res = await fetch(`/ultimate-analysis?year=${year}&round_no=${round_no}&match_no=${match_no}`,{headers:{ "Authorization":"Bearer "+token }});
             let data = await res.json();
 
-            document.getElementById("recommend_"+index).innerHTML = "추천: "+data.추천;
-
             let html = `
-                <div class="section-title">기본정보</div>
                 AI등급: ${data.AI등급}<br>
+                추천: ${data.추천}<br>
                 승: ${data.분포.승}<br>
                 무: ${data.분포.무}<br>
-                패: ${data.분포.패}
-
-                <div class="section-title">팀스캔</div>
-                (추가 예정)
-
-                <div class="section-title">배당스캔</div>
-                (추가 예정)
-
-                <div class="section-title">시크릿분석</div>
-                EV 최고값 추천 → ${data.추천}
+                패: ${data.분포.패}<br>
+                <br><b>시크릿:</b> ${data.시크릿분석}
             `;
 
             detail.innerHTML = html;
