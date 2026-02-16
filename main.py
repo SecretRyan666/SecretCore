@@ -98,11 +98,10 @@ def upload_data(file: UploadFile = File(...),
 
     raw = file.file.read()
 
-    df = pd.read_excel(
-        BytesIO(raw),
-        sheet_name="원본",
-        engine="openpyxl"
-    )
+    try:
+        df = pd.read_excel(BytesIO(raw), sheet_name="원본")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"엑셀 로드 실패: {str(e)}")
 
     required = [
         "년도","회차","순번","리그",
