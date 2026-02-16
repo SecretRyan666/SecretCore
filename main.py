@@ -48,14 +48,14 @@ def login(form_data: OAuth2PasswordRequestForm = Depends()):
 
 # ================= DATA STORAGE =================
 
-DATA_FILE = "data_store.csv"
+DATA_FILE = "data_store.xlsx"
 CURRENT_DF = pd.DataFrame()
 
 if os.path.exists(DATA_FILE):
-    CURRENT_DF = pd.read_csv(DATA_FILE)
+    CURRENT_DF = pd.read_excel(DATA_FILE)
 
 def save_data(df):
-    df.to_csv(DATA_FILE, index=False)
+    df.to_excel(DATA_FILE, index=False)
 
 # ================= UTIL =================
 
@@ -72,12 +72,15 @@ def dist(df):
     wp = win/total*100 if total else 0
     dp = draw/total*100 if total else 0
     lp = lose/total*100 if total else 0
+
     return {
         "총": total,
         "승": f"{bar(wp)} {round(wp,2)}% ({win})",
         "무": f"{bar(dp)} {round(dp,2)}% ({draw})",
         "패": f"{bar(lp)} {round(lp,2)}% ({lose})",
-        "wp": wp, "dp": dp, "lp": lp
+        "wp": wp,
+        "dp": dp,
+        "lp": lp
     }
 
 def ai_grade(score):
@@ -88,7 +91,7 @@ def ai_grade(score):
     if score >= 50: return "C"
     return "D"
 
-# ================= UPLOAD (엑셀 → CSV 변환) =================
+# ================= UPLOAD =================
 
 @app.post("/upload-data")
 def upload_data(file: UploadFile = File(...),
@@ -96,21 +99,31 @@ def upload_data(file: UploadFile = File(...),
 
     global CURRENT_DF
 
-    try:
-        df = pd.read_excel(
-            file.file,
-            sheet_name="원본",
-            usecols="A:Q"   # ✅ 메모리 절감
-        )
-    except Exception as e:
-        raise HTTPException(500, f"엑셀 로드 실패: {str(e)}")
+    raw = file.file.read()
 
-    # 컬럼 강제 지정 (A~Q 고정 구조)
-    df.columns = [
-        "NO","년도","회차","순번","종목","리그",
-        "홈팀","원정팀","승","무","패",
-        "일반구분","핸디구분","결과","유형","정역","홈원정"
-    ]
+    df = pd.read_excel(BytesIO(raw), sheet_name="원본")
+
+    df.columns = df.columns.str.strip()
+
+    # A~Q 고정 위치 매핑
+    df = df.rename(columns={
+        df.columns[0]:"NO",
+        df.columns[1]:"년도",
+        df.columns[2]:"회차",
+        df.columns[3]:"순번",
+        df.columns[5]:"리그",
+        df.columns[6]:"홈팀",
+        df.columns[7]:"원정팀",
+        df.columns[8]:"승",
+        df.columns[9]:"무",
+        df.columns[10]:"패",
+        df.columns[11]:"일반구분",
+        df.columns[12]:"핸디구분",
+        df.columns[13]:"결과",
+        df.columns[14]:"유형",
+        df.columns[15]:"정역",
+        df.columns[16]:"홈원정",
+    })
 
     df["결과"] = df["결과"].astype(str).str.strip()
     df["승"] = pd.to_numeric(df["승"], errors="coerce")
@@ -122,19 +135,13 @@ def upload_data(file: UploadFile = File(...),
     CURRENT_DF = df
     save_data(df)
 
-    return {
-        "total_games": len(df),
-        "target_games": len(df[df["결과"]=="경기전"])
-    }
+    return {"total_games": len(df)}
 
 # ================= MATCH LIST =================
 
 @app.get("/matches")
 def matches(user:str=Depends(get_current_user)):
-    if CURRENT_DF.empty:
-        return []
     m = CURRENT_DF[CURRENT_DF["결과"]=="경기전"].copy()
-    m = m.sort_values(["리그","일반구분"])
     return m.to_dict("records")
 
 # ================= 통합스캔 =================
@@ -144,15 +151,9 @@ def scan(year:int, round_no:str, match_no:int,
          user:str=Depends(get_current_user)):
 
     df = CURRENT_DF
-
-    target = df[(df["년도"]==year)&
-                (df["회차"]==round_no)&
-                (df["순번"]==match_no)]
-
-    if target.empty:
-        raise HTTPException(404)
-
-    row = target.iloc[0]
+    row = df[(df["년도"]==year)&
+             (df["회차"]==round_no)&
+             (df["순번"]==match_no)].iloc[0]
 
     base = df[
         (df["유형"]==row["유형"])&
@@ -179,17 +180,10 @@ def scan(year:int, round_no:str, match_no:int,
     grade = ai_grade(score)
 
     return {
-        "조건":{
-            "유형":row["유형"],
-            "홈원정":row["홈원정"],
-            "일반":row["일반구분"],
-            "정역":row["정역"],
-            "핸디":row["핸디구분"]
-        },
+        "조건":f"{row['유형']}.{row['홈원정']}.{row['일반구분']}.{row['정역']}.{row['핸디구분']}",
         "분포":base_dist,
-        "EV":{k:round(v,3) for k,v in ev_dict.items()},
-        "AI등급":grade,
-        "추천":best
+        "추천":best,
+        "AI등급":grade
     }
 
 # ================= UI =================
@@ -198,9 +192,60 @@ def scan(year:int, round_no:str, match_no:int,
 def home():
     return """
     <html>
-    <body style="background:#111;color:white;font-family:Arial;padding:20px;">
-    <h2>SecretCore PRO 안정버전</h2>
-    <p>/docs 에서 로그인 → 업로드 후 사용</p>
+    <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+    body{background:#111;color:white;font-family:Arial;padding:15px;}
+    .card{background:#1c1c1c;padding:12px;margin-bottom:12px;border-radius:10px;}
+    .row{display:flex;justify-content:space-between;}
+    .btn{background:#00ffcc;color:black;border:none;padding:6px 8px;border-radius:6px;}
+    </style>
+    </head>
+    <body>
+    <h2>⚽ SecretCore PRO 통합버전</h2>
+    <button onclick="load()">경기불러오기</button>
+    <div id="list"></div>
+
+    <script>
+    let token;
+
+    async function login(){
+        let f=new URLSearchParams();
+        f.append("username","admin");
+        f.append("password","1234");
+        let r=await fetch("/login",{method:"POST",
+        headers:{"Content-Type":"application/x-www-form-urlencoded"},body:f});
+        let d=await r.json();
+        token=d.access_token;
+    }
+
+    async function load(){
+        if(!token) await login();
+        let r=await fetch("/matches",{headers:{"Authorization":"Bearer "+token}});
+        let data=await r.json();
+        let html="";
+        data.forEach(m=>{
+            html+=`
+            <div class="card">
+            <div class="row">
+            <div>
+            ${m.리그} | <b>${m.홈팀}</b> vs <b>${m.원정팀}</b><br>
+            ${m.유형}.${m.홈원정}.${m.일반구분}.${m.정역}.${m.핸디구분}
+            </div>
+            <button class="btn" onclick="scan(${m.년도},'${m.회차}',${m.순번})">정보</button>
+            </div>
+            </div>`;
+        });
+        document.getElementById("list").innerHTML=html;
+    }
+
+    async function scan(y,r,m){
+        let res=await fetch(`/integrated-scan?year=${y}&round_no=${r}&match_no=${m}`,
+        {headers:{"Authorization":"Bearer "+token}});
+        let d=await res.json();
+        alert("조건:"+d.조건+"\\n추천:"+d.추천+"\\nAI:"+d.AI등급);
+    }
+    </script>
     </body>
     </html>
     """
