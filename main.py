@@ -299,21 +299,40 @@ def home():
                 padding:15px;
                 margin-bottom:15px;
                 border-radius:12px;
-                cursor:pointer;
                 box-shadow:0 0 10px rgba(0,255,204,0.2);
             }
-            .card:hover {
-                background:#262626;
+            .row {
+                display:flex;
+                justify-content:space-between;
+                align-items:center;
             }
-            .grade {
+            .left {
+                text-align:left;
+                font-size:13px;
+            }
+            .center {
+                text-align:center;
                 font-weight:bold;
-                margin-top:5px;
+                font-size:18px;
+                color:#00ffcc;
             }
-            .danger {
-                color:red;
+            .right button {
+                padding:6px 10px;
+                font-size:12px;
+                border-radius:6px;
+                background:#00ffcc;
+                border:none;
                 font-weight:bold;
             }
-            button {
+            .detail {
+                margin-top:10px;
+                background:#111;
+                padding:10px;
+                border-radius:8px;
+                display:none;
+                font-size:13px;
+            }
+            button.main {
                 padding:10px;
                 border:none;
                 border-radius:8px;
@@ -328,7 +347,7 @@ def home():
 
         <h1>⚽ SecretCore AI</h1>
 
-        <button onclick="loadMatches()">경기 불러오기</button>
+        <button class="main" onclick="loadMatches()">경기 불러오기</button>
         <div id="matches"></div>
 
         <script>
@@ -365,17 +384,51 @@ def home():
             let html="";
 
             data.forEach(m=>{
+
                 html+=`
-                <div class="card" onclick="analyze(${m.년도},'${m.회차}',${m.순번})">
-                    <b>${m.홈팀}</b> vs <b>${m.원정팀}</b><br>
-                    ${m.년도} ${m.회차} / ${m.유형}
-                </div>`;
+                <div class="card">
+
+                    <div class="row">
+
+                        <!-- 왼쪽 -->
+                        <div class="left">
+                            ${m.유형 || ""} | ${m.홈원정 || ""} | ${m.일반구분 || ""} | ${m.정역 || ""} | ${m.핸디구분 || ""}
+                            <br>
+                            <b>${m.홈팀}</b> vs <b>${m.원정팀}</b>
+                        </div>
+
+                        <!-- 중앙 -->
+                        <div class="center">
+                            추천
+                        </div>
+
+                        <!-- 오른쪽 -->
+                        <div class="right">
+                            <button onclick="toggleDetail(${m.년도},'${m.회차}',${m.순번})">
+                                정보
+                            </button>
+                        </div>
+
+                    </div>
+
+                    <div id="detail-${m.년도}-${m.회차}-${m.순번}" class="detail"></div>
+
+                </div>
+                `;
             });
 
             document.getElementById("matches").innerHTML=html;
         }
 
-        async function analyze(year,round_no,match_no){
+        async function toggleDetail(year,round_no,match_no){
+
+            let id = `detail-${year}-${round_no}-${match_no}`;
+            let el = document.getElementById(id);
+
+            if(el.style.display==="block"){
+                el.style.display="none";
+                return;
+            }
 
             let res = await fetch(
                 `/ultimate-analysis?year=${year}&round_no=${round_no}&match_no=${match_no}`,
@@ -384,17 +437,17 @@ def home():
 
             let data = await res.json();
 
-            let warning = "";
-            if(data.핸디상태 && data.핸디상태.includes("붕괴")){
-                warning = "\\n⚠️ " + data.핸디상태;
-            }
+            el.innerHTML = `
+                <div>
+                    <b>AI등급:</b> ${data.AI등급}<br>
+                    <b>추천:</b> ${data.추천}<br>
+                    <b>승:</b> ${data.분포.승}<br>
+                    <b>무:</b> ${data.분포.무}<br>
+                    <b>패:</b> ${data.분포.패}
+                </div>
+            `;
 
-            alert(
-                "AI등급: " + data.AI등급 +
-                "\\n추천: " + data.추천 +
-                "\\n승률: " + data.분포.승 +
-                warning
-            );
+            el.style.display="block";
         }
 
         </script>
