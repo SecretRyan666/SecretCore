@@ -91,17 +91,46 @@ def ai_grade(score):
 # ================= UPLOAD =================
 
 @app.post("/upload-data")
-def upload(file: UploadFile = File(...), user:str=Depends(get_current_user)):
+def upload_data(file: UploadFile = File(...),
+                user: str = Depends(get_current_user)):
+
     global CURRENT_DF
-    df = pd.read_excel(BytesIO(file.file.read()))
+
+    raw = file.file.read()
+
+    df = pd.read_excel(
+        BytesIO(raw),
+        sheet_name="원본",
+        engine="openpyxl"
+    )
+
+    required = [
+        "년도","회차","순번","리그",
+        "홈팀","원정팀","유형",
+        "일반구분","핸디구분","정역","홈원정",
+        "결과","승","무","패"
+    ]
+
+    for col in required:
+        if col not in df.columns:
+            raise HTTPException(400, f"Missing column: {col}")
+
     df["결과"] = df["결과"].astype(str).str.strip()
     df["승"] = df["승"].astype(float)
     df["무"] = df["무"].astype(float)
     df["패"] = df["패"].astype(float)
+
     df = df[df["유형"].isin(["일반","핸디1"])]
+
     CURRENT_DF = df
     save_data(df)
-    return {"total":len(df),"경기전":len(df[df["결과"]=="경기전"])}
+
+    target = df[df["결과"]=="경기전"]
+
+    return {
+        "total_games": len(df),
+        "target_games": len(target)
+    }
 
 # ================= MATCH LIST =================
 
