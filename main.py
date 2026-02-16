@@ -8,10 +8,6 @@ import pandas as pd
 from io import BytesIO
 import os
 
-# =====================================================
-# APP INIT
-# =====================================================
-
 app = FastAPI()
 
 app.add_middleware(
@@ -22,9 +18,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# =====================================================
-# AUTH
-# =====================================================
+# ================= AUTH =================
 
 SECRET_KEY = "secretcorekey"
 ALGORITHM = "HS256"
@@ -43,19 +37,17 @@ def get_current_user(token: str = Depends(oauth2_scheme)):
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         return payload.get("sub")
     except JWTError:
-        raise HTTPException(status_code=401)
+        raise HTTPException(status_code=401, detail="Invalid token")
 
 @app.post("/login")
 def login(form_data: OAuth2PasswordRequestForm = Depends()):
     if form_data.username != FAKE_USER["username"] or \
        form_data.password != FAKE_USER["password"]:
-        raise HTTPException(status_code=401)
+        raise HTTPException(status_code=401, detail="Login failed")
     token = create_token({"sub": form_data.username})
     return {"access_token": token, "token_type": "bearer"}
 
-# =====================================================
-# DATA STORAGE (엑셀 전용)
-# =====================================================
+# ================= DATA STORAGE =================
 
 DATA_FILE = "data_store.xlsx"
 CURRENT_DF = pd.DataFrame()
@@ -66,9 +58,7 @@ if os.path.exists(DATA_FILE):
 def save_data(df):
     df.to_excel(DATA_FILE, index=False)
 
-# =====================================================
-# UTIL
-# =====================================================
+# ================= UTIL =================
 
 def bar(p):
     filled = int(p/5)
@@ -77,6 +67,7 @@ def bar(p):
 def calc_distribution(df):
     total = len(df)
     vc = df["결과"].value_counts()
+
     win = vc.get("승",0)
     draw = vc.get("무",0)
     lose = vc.get("패",0)
@@ -103,9 +94,7 @@ def ai_grade(score):
     if score >= 45: return "C"
     return "D"
 
-# =====================================================
-# UPLOAD
-# =====================================================
+# ================= UPLOAD =================
 
 @app.post("/upload-data")
 def upload_data(file: UploadFile = File(...),
@@ -128,9 +117,9 @@ def upload_data(file: UploadFile = File(...),
             raise HTTPException(400, f"Missing {col}")
 
     df["결과"] = df["결과"].astype(str).str.strip()
-    df["승"] = df["승"].astype(float)
-    df["무"] = df["무"].astype(float)
-    df["패"] = df["패"].astype(float)
+    df["승"] = pd.to_numeric(df["승"], errors="coerce")
+    df["무"] = pd.to_numeric(df["무"], errors="coerce")
+    df["패"] = pd.to_numeric(df["패"], errors="coerce")
 
     df = df[df["유형"].isin(["일반","핸디1"])]
 
@@ -141,31 +130,33 @@ def upload_data(file: UploadFile = File(...),
 
     return {"total_games":len(df),"target_games":len(target)}
 
-# =====================================================
-# MATCH LIST
-# =====================================================
+# ================= MATCH LIST =================
 
 @app.get("/matches")
 def matches(user:str=Depends(get_current_user)):
-    df = CURRENT_DF
+    df = CURRENT_DF.copy()
+    df["결과"] = df["결과"].astype(str).str.strip()
     m = df[df["결과"]=="경기전"]
     return m.to_dict("records")
 
-# =====================================================
-# 통합스캔 엔진
-# =====================================================
+# ================= 통합스캔 =================
 
 @app.get("/integrated-scan")
 def integrated_scan(year:int, round_no:str, match_no:int,
                     user:str=Depends(get_current_user)):
 
-    df = CURRENT_DF
+    df = CURRENT_DF.copy()
+    df["결과"] = df["결과"].astype(str).str.strip()
 
-    row = df[(df["년도"]==year)&
-             (df["회차"]==round_no)&
-             (df["순번"]==match_no)].iloc[0]
+    target = df[(df["년도"]==year)&
+                (df["회차"]==round_no)&
+                (df["순번"]==match_no)]
 
-    # 기본조건키
+    if target.empty:
+        raise HTTPException(404, detail="Match not found")
+
+    row = target.iloc[0]
+
     base_key = df[
         (df["유형"]==row["유형"])&
         (df["홈원정"]==row["홈원정"])&
@@ -176,16 +167,6 @@ def integrated_scan(year:int, round_no:str, match_no:int,
 
     base_dist = calc_distribution(base_key)
 
-    # 일반 전체
-    general_all = df[
-        (df["유형"]==row["유형"])&
-        (df["홈원정"]==row["홈원정"])&
-        (df["일반구분"]==row["일반구분"])
-    ]
-
-    general_dist = calc_distribution(general_all)
-
-    # EV 계산
     ev_w = base_dist["win_p"]/100 * row["승"] - 1
     ev_d = base_dist["draw_p"]/100 * row["무"] - 1
     ev_l = base_dist["lose_p"]/100 * row["패"] - 1
@@ -209,76 +190,66 @@ def integrated_scan(year:int, round_no:str, match_no:int,
             "핸디":row["핸디구분"]
         },
         "기본조건분포":base_dist,
-        "일반전체분포":general_dist,
         "EV":{k:round(v,3) for k,v in ev_dict.items()},
         "AI등급":grade,
         "추천":best
     }
 
-# =====================================================
-# UI
-# =====================================================
+# ================= UI =================
 
 @app.get("/", response_class=HTMLResponse)
 def home():
     return """
     <html>
-    <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <style>
-            body{background:#111;color:white;font-family:Arial;padding:15px;}
-            .card{background:#1c1c1c;padding:12px;margin-bottom:12px;border-radius:10px;}
-            .row{display:flex;justify-content:space-between;align-items:center;}
-            .info{background:#00ffcc;color:black;border:none;padding:6px 8px;border-radius:6px;}
-        </style>
-    </head>
-    <body>
-        <h2>⚽ SecretCore PRO</h2>
-        <button onclick="load()">경기불러오기</button>
-        <div id="list"></div>
+    <body style="background:#111;color:white;font-family:Arial;padding:15px;">
+    <h2>⚽ SecretCore PRO</h2>
+    <button onclick="load()">경기불러오기</button>
+    <div id="list"></div>
 
-        <script>
-        let token;
+    <script>
+    let token = localStorage.getItem("token");
 
-        async function login(){
-            let form=new URLSearchParams();
-            form.append("username","admin");
-            form.append("password","1234");
+    async function login(){
+        let form=new URLSearchParams();
+        form.append("username","admin");
+        form.append("password","1234");
 
-            let r=await fetch("/login",{method:"POST",
-                headers:{"Content-Type":"application/x-www-form-urlencoded"},
-                body:form});
-            let d=await r.json();
-            token=d.access_token;
-        }
+        let r=await fetch("/login",{method:"POST",
+            headers:{"Content-Type":"application/x-www-form-urlencoded"},
+            body:form});
+        let d=await r.json();
+        token=d.access_token;
+        localStorage.setItem("token",token);
+    }
 
-        async function load(){
-            if(!token) await login();
-            let r=await fetch("/matches",{headers:{"Authorization":"Bearer "+token}});
-            let data=await r.json();
-            let html="";
-            data.forEach((m,i)=>{
-                html+=`
-                <div class="card">
-                    <div class="row">
-                        <div>
-                            <b>${m.홈팀}</b> vs <b>${m.원정팀}</b><br>
-                            ${m.유형}.${m.홈원정}.${m.일반구분}.${m.정역}.${m.핸디구분}
-                        </div>
-                        <button class="info" onclick="scan(${m.년도},'${m.회차}',${m.순번})">정보</button>
-                    </div>
-                </div>`;
-            });
-            document.getElementById("list").innerHTML=html;
-        }
+    async function load(){
+        if(!token) await login();
 
-        async function scan(year,round_no,match_no){
-            let r=await fetch(`/integrated-scan?year=${year}&round_no=${round_no}&match_no=${match_no}`,
-                {headers:{"Authorization":"Bearer "+token}});
-            let d=await r.json();
-            alert("추천:"+d.추천+" | AI:"+d.AI등급);
-        }
-        </script>
+        let r=await fetch("/matches",
+            {headers:{"Authorization":"Bearer "+token}});
+        let data=await r.json();
+
+        let html="";
+        data.forEach(m=>{
+            html+=`
+            <div style="background:#1c1c1c;padding:12px;margin-bottom:10px;border-radius:10px;">
+                <b>${m.리그}</b> |
+                <b>${m.홈팀}</b> vs <b>${m.원정팀}</b><br>
+                ${m.유형}.${m.홈원정}.${m.일반구분}.${m.정역}.${m.핸디구분}
+                <button onclick="scan(${m.년도},'${m.회차}',${m.순번})">정보</button>
+            </div>`;
+        });
+
+        document.getElementById("list").innerHTML=html;
+    }
+
+    async function scan(year,round_no,match_no){
+        let r=await fetch(`/integrated-scan?year=${year}&round_no=${round_no}&match_no=${match_no}`,
+            {headers:{"Authorization":"Bearer "+token}});
+        let d=await r.json();
+        alert("추천:"+d.추천+" | AI:"+d.AI등급);
+    }
+    </script>
     </body>
     </html>
     """
