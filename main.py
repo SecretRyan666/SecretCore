@@ -1,7 +1,7 @@
-from fastapi import FastAPI, UploadFile, File, Depends, HTTPException, Form
+from fastapi import FastAPI, UploadFile, File, Depends, HTTPException
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse
 from jose import jwt, JWTError
 from datetime import datetime, timedelta
 import pandas as pd
@@ -68,7 +68,7 @@ def save_data(df):
     df.to_csv(DATA_FILE, index=False)
 
 # =====================================================
-# UTILITY
+# UTIL
 # =====================================================
 
 def bar(p):
@@ -111,8 +111,6 @@ def upload_data(file: UploadFile = File(...),
             raise HTTPException(400, f"Missing {col}")
 
     df["결과"] = df["결과"].astype(str).str.strip()
-
-    # 일반 + 핸디1만 유지
     df = df[df["유형"].isin(["일반","핸디1"])]
 
     CURRENT_DF = df
@@ -136,7 +134,7 @@ def matches(user:str=Depends(get_current_user)):
     return m[["년도","회차","순번","홈팀","원정팀","유형"]].to_dict("records")
 
 # =====================================================
-# ULTIMATE ANALYSIS (엔진 자리)
+# ULTIMATE ANALYSIS
 # =====================================================
 
 @app.get("/ultimate-analysis")
@@ -173,6 +171,13 @@ def ultimate(year:int, round_no:str, match_no:int,
     draw_p = draw/total*100 if total else 0
     lose_p = lose/total*100 if total else 0
 
+    ev_w = win_p/100*row["승"]-1
+    ev_d = draw_p/100*row["무"]-1
+    ev_l = lose_p/100*row["패"]-1
+
+    ev_dict = {"승":ev_w,"무":ev_d,"패":ev_l}
+    best = max(ev_dict, key=ev_dict.get)
+
     score = max(win_p, draw_p, lose_p)
     grade = ai_grade(score)
 
@@ -184,11 +189,13 @@ def ultimate(year:int, round_no:str, match_no:int,
             "무": f"{bar(draw_p)} {round(draw_p,2)}%",
             "패": f"{bar(lose_p)} {round(lose_p,2)}%"
         },
-        "AI등급": grade
+        "EV":{k:round(v,3) for k,v in ev_dict.items()},
+        "AI등급": grade,
+        "추천": best
     }
 
 # =====================================================
-# TEAM SCAN (자리 확보)
+# TEAM SCAN
 # =====================================================
 
 @app.get("/team-scan")
@@ -202,19 +209,70 @@ def team_scan(team:str, home_away:str,
         ((df["원정팀"]==team)&(home_away=="원정"))
     ]
 
-    return {"message":"Team scan engine placeholder"}
+    if team_df.empty:
+        raise HTTPException(404)
+
+    result = {}
+
+    for game_type in ["일반","핸디1"]:
+        sub = team_df[team_df["유형"]==game_type]
+        if sub.empty:
+            continue
+
+        total = len(sub)
+        vc = sub["결과"].value_counts()
+
+        win = vc.get("승",0)
+        draw = vc.get("무",0)
+        lose = vc.get("패",0)
+
+        win_p = win/total*100 if total else 0
+        draw_p = draw/total*100 if total else 0
+        lose_p = lose/total*100 if total else 0
+
+        result[game_type] = {
+            "총": total,
+            "승": f"{bar(win_p)} {round(win_p,2)}%",
+            "무": f"{bar(draw_p)} {round(draw_p,2)}%",
+            "패": f"{bar(lose_p)} {round(lose_p,2)}%"
+        }
+
+    return result
 
 # =====================================================
-# ODDS SCAN (자리 확보)
+# ODDS SCAN
 # =====================================================
 
 @app.get("/odds-scan")
 def odds_scan(odds:float,
               user:str=Depends(get_current_user)):
-    return {"message":"Odds scan engine placeholder"}
+
+    df = CURRENT_DF
+    sub = df[abs(df["승"] - odds) < 0.001]
+
+    if sub.empty:
+        raise HTTPException(404)
+
+    total = len(sub)
+    vc = sub["결과"].value_counts()
+
+    win = vc.get("승",0)
+    draw = vc.get("무",0)
+    lose = vc.get("패",0)
+
+    win_p = win/total*100 if total else 0
+    draw_p = draw/total*100 if total else 0
+    lose_p = lose/total*100 if total else 0
+
+    return {
+        "총": total,
+        "승": f"{bar(win_p)} {round(win_p,2)}%",
+        "무": f"{bar(draw_p)} {round(draw_p,2)}%",
+        "패": f"{bar(lose_p)} {round(lose_p,2)}%"
+    }
 
 # =====================================================
-# MOBILE WEB UI
+# SIMPLE MOBILE UI
 # =====================================================
 
 @app.get("/", response_class=HTMLResponse)
