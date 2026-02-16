@@ -280,59 +280,53 @@ def home():
     return """
     <html>
     <head>
-        <title>SecretCore</title>
+        <title>SecretCore AI</title>
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <style>
-            body {
-                background:#0f0f0f;
-                color:white;
-                font-family:Arial;
-                padding:20px;
-                margin:0;
-            }
-            h1 {
-                color:#00ffcc;
-                text-align:center;
-            }
+            body {background:#0f0f0f;color:white;font-family:Arial;margin:0;padding:20px;}
+            h1 {color:#00ffcc;text-align:center;}
+
             .card {
                 background:#1c1c1c;
                 padding:15px;
                 margin-bottom:15px;
-                border-radius:12px;
-                box-shadow:0 0 10px rgba(0,255,204,0.2);
+                border-radius:14px;
+                box-shadow:0 0 12px rgba(0,255,204,0.3);
             }
+
             .row {
                 display:flex;
                 justify-content:space-between;
                 align-items:center;
             }
-            .left {
-                text-align:left;
-                font-size:13px;
-            }
-            .center {
-                text-align:center;
-                font-weight:bold;
-                font-size:18px;
-                color:#00ffcc;
-            }
-            .right button {
-                padding:6px 10px;
-                font-size:12px;
-                border-radius:6px;
+
+            .left {font-size:12px;color:#aaa;}
+            .center {font-size:18px;font-weight:bold;color:#00ffcc;}
+            .info-btn {
                 background:#00ffcc;
                 border:none;
+                border-radius:8px;
+                padding:6px 10px;
                 font-weight:bold;
+                color:black;
+                cursor:pointer;
             }
+
             .detail {
                 margin-top:10px;
-                background:#111;
                 padding:10px;
-                border-radius:8px;
+                background:#111;
+                border-radius:10px;
                 display:none;
-                font-size:13px;
             }
-            button.main {
+
+            .section-title {
+                margin-top:10px;
+                font-weight:bold;
+                color:#00ffcc;
+            }
+
+            button {
                 padding:10px;
                 border:none;
                 border-radius:8px;
@@ -346,8 +340,7 @@ def home():
     <body>
 
         <h1>⚽ SecretCore AI</h1>
-
-        <button class="main" onclick="loadMatches()">경기 불러오기</button>
+        <button onclick="loadMatches()">경기 불러오기</button>
         <div id="matches"></div>
 
         <script>
@@ -383,50 +376,30 @@ def home():
             let data = await res.json();
             let html="";
 
-            data.forEach(m=>{
-
+            data.forEach((m,index)=>{
                 html+=`
                 <div class="card">
-
                     <div class="row">
-
-                        <!-- 왼쪽 -->
-                        <div class="left">
-                            ${m.유형 || ""} | ${m.홈원정 || ""} | ${m.일반구분 || ""} | ${m.정역 || ""} | ${m.핸디구분 || ""}
-                            <br>
-                            <b>${m.홈팀}</b> vs <b>${m.원정팀}</b>
+                        <div>
+                            <div class="left">${m.유형} | ${m.년도} ${m.회차}</div>
+                            <div><b>${m.홈팀}</b> vs <b>${m.원정팀}</b></div>
                         </div>
-
-                        <!-- 중앙 -->
-                        <div class="center">
-                            추천
-                        </div>
-
-                        <!-- 오른쪽 -->
-                        <div class="right">
-                            <button onclick="toggleDetail(${m.년도},'${m.회차}',${m.순번})">
-                                정보
-                            </button>
-                        </div>
-
+                        <div class="center" id="recommend_${index}">추천</div>
+                        <button class="info-btn" onclick="toggleDetail(${index},${m.년도},'${m.회차}',${m.순번})">정보</button>
                     </div>
-
-                    <div id="detail-${m.년도}-${m.회차}-${m.순번}" class="detail"></div>
-
-                </div>
-                `;
+                    <div class="detail" id="detail_${index}"></div>
+                </div>`;
             });
 
             document.getElementById("matches").innerHTML=html;
         }
 
-        async function toggleDetail(year,round_no,match_no){
+        async function toggleDetail(index,year,round_no,match_no){
 
-            let id = `detail-${year}-${round_no}-${match_no}`;
-            let el = document.getElementById(id);
+            let detail = document.getElementById("detail_"+index);
 
-            if(el.style.display==="block"){
-                el.style.display="none";
+            if(detail.style.display==="block"){
+                detail.style.display="none";
                 return;
             }
 
@@ -437,17 +410,27 @@ def home():
 
             let data = await res.json();
 
-            el.innerHTML = `
-                <div>
-                    <b>AI등급:</b> ${data.AI등급}<br>
-                    <b>추천:</b> ${data.추천}<br>
-                    <b>승:</b> ${data.분포.승}<br>
-                    <b>무:</b> ${data.분포.무}<br>
-                    <b>패:</b> ${data.분포.패}
-                </div>
+            document.getElementById("recommend_"+index).innerHTML = "추천: "+data.추천;
+
+            let html = `
+                <div class="section-title">기본정보</div>
+                AI등급: ${data.AI등급}<br>
+                승: ${data.분포.승}<br>
+                무: ${data.분포.무}<br>
+                패: ${data.분포.패}
+
+                <div class="section-title">팀스캔</div>
+                (추가 예정)
+
+                <div class="section-title">배당스캔</div>
+                (추가 예정)
+
+                <div class="section-title">시크릿분석</div>
+                EV 최고값 추천 → ${data.추천}
             `;
 
-            el.style.display="block";
+            detail.innerHTML = html;
+            detail.style.display="block";
         }
 
         </script>
