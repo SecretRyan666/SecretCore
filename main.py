@@ -63,33 +63,30 @@ def bar(p):
     filled = int(p/5)
     return "█"*filled + "-"*(20-filled)
 
-def distribution(df):
+def dist(df):
     total = len(df)
     if total == 0:
         return {"총":0,"승":"-","무":"-","패":"-","wp":0,"dp":0,"lp":0}
-
     vc = df["결과"].value_counts()
-    win = vc.get("승",0)
-    draw = vc.get("무",0)
-    lose = vc.get("패",0)
-
-    wp = win/total*100
-    dp = draw/total*100
-    lp = lose/total*100
-
+    w = vc.get("승",0)
+    d = vc.get("무",0)
+    l = vc.get("패",0)
+    wp = w/total*100
+    dp = d/total*100
+    lp = l/total*100
     return {
-        "총": total,
-        "승": f"{bar(wp)} {round(wp,2)}% ({win})",
-        "무": f"{bar(dp)} {round(dp,2)}% ({draw})",
-        "패": f"{bar(lp)} {round(lp,2)}% ({lose})",
-        "wp": wp, "dp": dp, "lp": lp
+        "총":total,
+        "승":f"{bar(wp)} {round(wp,2)}% ({w})",
+        "무":f"{bar(dp)} {round(dp,2)}% ({d})",
+        "패":f"{bar(lp)} {round(lp,2)}% ({l})",
+        "wp":wp,"dp":dp,"lp":lp
     }
 
-def ai_score(dist, ev_best):
-    score = max(dist["wp"], dist["dp"], dist["lp"])
-    if ev_best > 0: score += 8
-    if dist["dp"] >= 35: score -= 5
-    if dist["총"] < 30: score -= 7
+def ai_score(d, ev):
+    score = max(d["wp"], d["dp"], d["lp"])
+    if ev > 0: score += 7
+    if d["dp"] >= 35: score -= 5
+    if d["총"] < 30: score -= 7
     return score
 
 def ai_grade(score):
@@ -107,6 +104,7 @@ def upload_data(file: UploadFile = File(...),
                 user: str = Depends(get_current_user)):
 
     global CURRENT_DF
+
     raw = file.file.read()
     df = pd.read_csv(BytesIO(raw), encoding="utf-8")
     df.columns = df.columns.str.strip()
@@ -124,82 +122,70 @@ def upload_data(file: UploadFile = File(...),
     df["무"] = pd.to_numeric(df["무"], errors="coerce")
     df["패"] = pd.to_numeric(df["패"], errors="coerce")
 
-    df = df[df["유형"].isin(["일반","핸디1"])]
-
     CURRENT_DF = df
     save_data(df)
 
-    target = df[df["결과"]=="경기전"]
-    return {"total_games":len(df),"target_games":len(target)}
+    return {
+        "total_games": len(df),
+        "target_games": len(df[df["결과"]=="경기전"])
+    }
 
 # ================= MATCH LIST =================
 
 @app.get("/matches")
 def matches(user:str=Depends(get_current_user)):
-    df = CURRENT_DF
-    m = df[df["결과"]=="경기전"].copy()
+    m = CURRENT_DF[CURRENT_DF["결과"]=="경기전"].copy()
     m = m.sort_values(["리그","일반구분"])
     return m.to_dict("records")
 
-# ================= 통합스캔 + 3단계 =================
+# ================= 통합스캔 =================
 
 @app.get("/integrated-scan")
 def integrated_scan(year:int, round_no:str, match_no:int,
                     user:str=Depends(get_current_user)):
 
     df = CURRENT_DF
+    row = df[(df["년도"]==year)&
+             (df["회차"]==round_no)&
+             (df["순번"]==match_no)]
 
-    row_df = df[(df["년도"]==year)&
-                (df["회차"]==round_no)&
-                (df["순번"]==match_no)]
-
-    if row_df.empty:
+    if row.empty:
         raise HTTPException(404)
 
-    row = row_df.iloc[0]
+    row = row.iloc[0]
 
-    # 1단계 기본조건키
-    stage1 = df[(df["유형"]==row["유형"])&
-                (df["홈원정"]==row["홈원정"])&
-                (df["일반구분"]==row["일반구분"])&
-                (df["정역"]==row["정역"])&
-                (df["핸디구분"]==row["핸디구분"])]
+    base = df[(df["유형"]==row["유형"])&
+              (df["홈원정"]==row["홈원정"])&
+              (df["일반구분"]==row["일반구분"])&
+              (df["정역"]==row["정역"])&
+              (df["핸디구분"]==row["핸디구분"])]
 
-    stage1_dist = distribution(stage1)
+    d1 = dist(base)
 
-    # 2단계 (핸디 제거)
-    stage2 = df[(df["유형"]==row["유형"])&
-                (df["홈원정"]==row["홈원정"])&
-                (df["일반구분"]==row["일반구분"])&
-                (df["정역"]==row["정역"])]
+    d2 = dist(df[(df["유형"]==row["유형"])&
+                 (df["홈원정"]==row["홈원정"])&
+                 (df["일반구분"]==row["일반구분"])])
 
-    stage2_dist = distribution(stage2)
-
-    # 3단계 (정역 제거)
-    stage3 = df[(df["유형"]==row["유형"])&
-                (df["홈원정"]==row["홈원정"])&
-                (df["일반구분"]==row["일반구분"])]
-
-    stage3_dist = distribution(stage3)
+    d3 = dist(df[(df["유형"]==row["유형"])&
+                 (df["홈원정"]==row["홈원정"])])
 
     # EV
-    ev_w = stage1_dist["wp"]/100*row["승"]-1
-    ev_d = stage1_dist["dp"]/100*row["무"]-1
-    ev_l = stage1_dist["lp"]/100*row["패"]-1
+    ev_w = d1["wp"]/100*row["승"]-1
+    ev_d = d1["dp"]/100*row["무"]-1
+    ev_l = d1["lp"]/100*row["패"]-1
+
     ev_dict = {"승":ev_w,"무":ev_d,"패":ev_l}
     best = max(ev_dict,key=ev_dict.get)
 
-    score = ai_score(stage1_dist, ev_dict[best])
+    score = ai_score(d1, ev_dict[best])
     grade = ai_grade(score)
 
     return {
-        "조건": row.to_dict(),
-        "1단계": stage1_dist,
-        "2단계": stage2_dist,
-        "3단계": stage3_dist,
-        "EV":{k:round(v,3) for k,v in ev_dict.items()},
-        "AI등급": grade,
-        "추천": best
+        "추천":best,
+        "AI":grade,
+        "1단계":d1,
+        "2단계":d2,
+        "3단계":d3
     }
 
 # ================= UI =================
@@ -209,7 +195,7 @@ def home():
     return """
     <html>
     <body style="background:#111;color:white;font-family:Arial;padding:15px">
-    <h2>⚽ SecretCore PRO</h2>
+    <h2>⚽ SecretCore PRO 완전체</h2>
     <button onclick="load()">경기목록</button>
     <div id="list"></div>
 
@@ -231,7 +217,8 @@ def home():
         let data=await r.json();
         let html="";
         data.forEach(m=>{
-            html+=`<div style="margin-bottom:10px">
+            html+=`
+            <div style="margin-bottom:12px">
             ${m.리그} | <b>${m.홈팀}</b> vs <b>${m.원정팀}</b>
             <button onclick="scan(${m.년도},'${m.회차}',${m.순번})">정보</button>
             </div>`;
@@ -243,13 +230,7 @@ def home():
         let res=await fetch(`/integrated-scan?year=${y}&round_no=${r}&match_no=${m}`,
         {headers:{"Authorization":"Bearer "+token}});
         let d=await res.json();
-
-        alert(
-        "추천:"+d.추천+" | AI:"+d.AI등급+"\\n\\n"+
-        "1단계\\n"+d["1단계"].승+"\\n"+d["1단계"].무+"\\n"+d["1단계"].패+"\\n\\n"+
-        "2단계\\n"+d["2단계"].승+"\\n"+d["2단계"].무+"\\n"+d["2단계"].패+"\\n\\n"+
-        "3단계\\n"+d["3단계"].승+"\\n"+d["3단계"].무+"\\n"+d["3단계"].패
-        );
+        alert("추천:"+d.추천+" | AI:"+d.AI);
     }
     </script>
     </body>
