@@ -8,10 +8,6 @@ import pandas as pd
 from io import BytesIO
 import os
 
-# =====================================================
-# APP INIT
-# =====================================================
-
 app = FastAPI()
 
 app.add_middleware(
@@ -22,9 +18,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# =====================================================
-# AUTH SYSTEM
-# =====================================================
+# ================= AUTH =================
 
 SECRET_KEY = "secretcorekey"
 ALGORITHM = "HS256"
@@ -53,9 +47,7 @@ def login(form_data: OAuth2PasswordRequestForm = Depends()):
     token = create_token({"sub": form_data.username})
     return {"access_token": token, "token_type": "bearer"}
 
-# =====================================================
-# DATA STORAGE (영구 저장)
-# =====================================================
+# ================= DATA STORAGE =================
 
 DATA_FILE = "data_store.csv"
 CURRENT_DF = pd.DataFrame()
@@ -66,9 +58,7 @@ if os.path.exists(DATA_FILE):
 def save_data(df):
     df.to_csv(DATA_FILE, index=False)
 
-# =====================================================
-# UTIL
-# =====================================================
+# ================= UTIL =================
 
 def bar(p):
     filled = int(p/5)
@@ -81,16 +71,13 @@ def ai_grade(score):
     if score > 50: return "B"
     return "C"
 
-# =====================================================
-# UPLOAD ENGINE
-# =====================================================
+# ================= UPLOAD =================
 
 @app.post("/upload-data")
 def upload_data(file: UploadFile = File(...),
                 user: str = Depends(get_current_user)):
 
     global CURRENT_DF
-
     raw = file.file.read()
 
     if file.filename.endswith(".csv"):
@@ -122,9 +109,7 @@ def upload_data(file: UploadFile = File(...),
         "target_games": len(target)
     }
 
-# =====================================================
-# MATCH LIST
-# =====================================================
+# ================= MATCH LIST =================
 
 @app.get("/matches")
 def matches(user:str=Depends(get_current_user)):
@@ -132,9 +117,7 @@ def matches(user:str=Depends(get_current_user)):
     m = df[df["결과"]=="경기전"]
     return m[["년도","회차","순번","홈팀","원정팀","유형"]].to_dict("records")
 
-# =====================================================
-# ULTIMATE ANALYSIS
-# =====================================================
+# ================= ULTIMATE ENGINE =================
 
 @app.get("/ultimate-analysis")
 def ultimate(year:int, round_no:str, match_no:int,
@@ -151,6 +134,7 @@ def ultimate(year:int, round_no:str, match_no:int,
 
     row = target.iloc[0]
 
+    # ===== 4단계 동일조건 =====
     base = df[
         (df["유형"]==row["유형"])&
         (df["일반구분"]==row["일반구분"])&
@@ -170,6 +154,7 @@ def ultimate(year:int, round_no:str, match_no:int,
     draw_p = draw/total*100 if total else 0
     lose_p = lose/total*100 if total else 0
 
+    # ===== EV =====
     ev_w = win_p/100*row["승"]-1
     ev_d = draw_p/100*row["무"]-1
     ev_l = lose_p/100*row["패"]-1
@@ -177,7 +162,25 @@ def ultimate(year:int, round_no:str, match_no:int,
     ev_dict = {"승":ev_w,"무":ev_d,"패":ev_l}
     best = max(ev_dict, key=ev_dict.get)
 
-    # 시크릿 분석
+    # ===== 팀스캔 =====
+    team_df = df[
+        (df["홈팀"]==row["홈팀"]) |
+        (df["원정팀"]==row["원정팀"])
+    ]
+
+    team_total = len(team_df)
+    team_vc = team_df["결과"].value_counts()
+    team_win = team_vc.get("승",0)
+    team_win_p = team_win/team_total*100 if team_total else 0
+
+    # ===== 배당스캔 =====
+    odds_df = df[abs(df["승"] - row["승"]) < 0.001]
+    odds_total = len(odds_df)
+    odds_vc = odds_df["결과"].value_counts()
+    odds_win = odds_vc.get("승",0)
+    odds_win_p = odds_win/odds_total*100 if odds_total else 0
+
+    # ===== 시크릿 =====
     secret = ""
     if row["일반구분"]=="A" and draw_p >= 30:
         secret = "🎯 무 시그널"
@@ -188,84 +191,33 @@ def ultimate(year:int, round_no:str, match_no:int,
     grade = ai_grade(score)
 
     return {
-        "기본정보": row.to_dict(),
-        "분포":{
+        "분포조건": {
+            "유형": row["유형"],
+            "일반구분": row["일반구분"],
+            "핸디구분": row["핸디구분"],
+            "정역": row["정역"],
+            "홈원정": row["홈원정"]
+        },
+        "AI등급": grade,
+        "추천": best,
+        "4단계분포": {
             "총": total,
             "승": f"{bar(win_p)} {round(win_p,2)}%",
             "무": f"{bar(draw_p)} {round(draw_p,2)}%",
             "패": f"{bar(lose_p)} {round(lose_p,2)}%"
         },
-        "EV":{k:round(v,3) for k,v in ev_dict.items()},
-        "AI등급": grade,
-        "추천": best,
+        "팀스캔": {
+            "총": team_total,
+            "승": f"{bar(team_win_p)} {round(team_win_p,2)}%"
+        },
+        "배당스캔": {
+            "총": odds_total,
+            "승": f"{bar(odds_win_p)} {round(odds_win_p,2)}%"
+        },
         "시크릿분석": secret
     }
 
-# =====================================================
-# TEAM SCAN
-# =====================================================
-
-@app.get("/team-scan")
-def team_scan(team:str, home_away:str,
-              user:str=Depends(get_current_user)):
-
-    df = CURRENT_DF
-
-    team_df = df[
-        ((df["홈팀"]==team)&(home_away=="홈")) |
-        ((df["원정팀"]==team)&(home_away=="원정"))
-    ]
-
-    if team_df.empty:
-        raise HTTPException(404)
-
-    result = {}
-    for gtype in ["일반","핸디1"]:
-        sub = team_df[team_df["유형"]==gtype]
-        if sub.empty:
-            continue
-
-        total = len(sub)
-        vc = sub["결과"].value_counts()
-
-        win = vc.get("승",0)
-        win_p = win/total*100 if total else 0
-
-        result[gtype] = {
-            "총": total,
-            "승": f"{bar(win_p)} {round(win_p,2)}%"
-        }
-
-    return result
-
-# =====================================================
-# ODDS SCAN
-# =====================================================
-
-@app.get("/odds-scan")
-def odds_scan(odds:float,
-              user:str=Depends(get_current_user)):
-
-    df = CURRENT_DF
-    sub = df[abs(df["승"] - odds) < 0.001]
-
-    if sub.empty:
-        raise HTTPException(404)
-
-    total = len(sub)
-    vc = sub["결과"].value_counts()
-
-    win = vc.get("승",0)
-    win_p = win/total*100 if total else 0
-
-    return {
-        "총": total,
-        "승": f"{bar(win_p)} {round(win_p,2)}%"
-    }
-
-# =====================================================
-# FULL MOBILE WEB APP
-# =====================================================
+# ================= MOBILE WEB =================
 
 @app.get("/", response_class=HTMLResponse)
 def home():
@@ -334,16 +286,40 @@ def home():
                 return;
             }
 
-            let res = await fetch(`/ultimate-analysis?year=${year}&round_no=${round_no}&match_no=${match_no}`,{headers:{ "Authorization":"Bearer "+token }});
+            let res = await fetch(`/ultimate-analysis?year=${year}&round_no=${round_no}&match_no=${match_no}`,
+            { headers:{ "Authorization":"Bearer "+token }});
+
             let data = await res.json();
 
             let html = `
-                AI등급: ${data.AI등급}<br>
-                추천: ${data.추천}<br>
-                승: ${data.분포.승}<br>
-                무: ${data.분포.무}<br>
-                패: ${data.분포.패}<br>
-                <br><b>시크릿:</b> ${data.시크릿분석}
+                <b>조건:</b>
+                ${data.분포조건.유형} /
+                ${data.분포조건.일반구분} /
+                ${data.분포조건.핸디구분} /
+                ${data.분포조건.정역} /
+                ${data.분포조건.홈원정}
+                <br><br>
+
+                <b>AI등급:</b> ${data.AI등급}
+                <br><br>
+
+                <b>4단계 분포</b><br>
+                승: ${data["4단계분포"].승}<br>
+                무: ${data["4단계분포"].무}<br>
+                패: ${data["4단계분포"].패}
+
+                <br><br>
+                <b>팀스캔</b><br>
+                승: ${data.팀스캔.승} (총 ${data.팀스캔.총})
+
+                <br><br>
+                <b>배당스캔</b><br>
+                승: ${data.배당스캔.승} (총 ${data.배당스캔.총})
+
+                <br><br>
+                <b>추천:</b> ${data.추천}
+                <br>
+                <b>시크릿:</b> ${data.시크릿분석}
             `;
 
             detail.innerHTML = html;
