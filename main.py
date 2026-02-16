@@ -87,7 +87,7 @@ def distribution(df):
 
 def ai_score(dist, ev_best):
     score = max(dist["wp"], dist["dp"], dist["lp"])
-    if ev_best > 0: score += 7
+    if ev_best > 0: score += 8
     if dist["dp"] >= 35: score -= 5
     if dist["총"] < 30: score -= 7
     return score
@@ -107,10 +107,8 @@ def upload_data(file: UploadFile = File(...),
                 user: str = Depends(get_current_user)):
 
     global CURRENT_DF
-
     raw = file.file.read()
     df = pd.read_csv(BytesIO(raw), encoding="utf-8")
-
     df.columns = df.columns.str.strip()
 
     required = ["년도","회차","순번","리그","홈팀","원정팀",
@@ -132,7 +130,6 @@ def upload_data(file: UploadFile = File(...),
     save_data(df)
 
     target = df[df["결과"]=="경기전"]
-
     return {"total_games":len(df),"target_games":len(target)}
 
 # ================= MATCH LIST =================
@@ -144,7 +141,7 @@ def matches(user:str=Depends(get_current_user)):
     m = m.sort_values(["리그","일반구분"])
     return m.to_dict("records")
 
-# ================= 통합스캔 =================
+# ================= 통합스캔 + 3단계 =================
 
 @app.get("/integrated-scan")
 def integrated_scan(year:int, round_no:str, match_no:int,
@@ -152,75 +149,57 @@ def integrated_scan(year:int, round_no:str, match_no:int,
 
     df = CURRENT_DF
 
-    row = df[(df["년도"]==year)&
-             (df["회차"]==round_no)&
-             (df["순번"]==match_no)]
+    row_df = df[(df["년도"]==year)&
+                (df["회차"]==round_no)&
+                (df["순번"]==match_no)]
 
-    if row.empty:
+    if row_df.empty:
         raise HTTPException(404)
 
-    row = row.iloc[0]
+    row = row_df.iloc[0]
 
-    base = df[(df["유형"]==row["유형"])&
-              (df["홈원정"]==row["홈원정"])&
-              (df["일반구분"]==row["일반구분"])&
-              (df["정역"]==row["정역"])&
-              (df["핸디구분"]==row["핸디구분"])]
+    # 1단계 기본조건키
+    stage1 = df[(df["유형"]==row["유형"])&
+                (df["홈원정"]==row["홈원정"])&
+                (df["일반구분"]==row["일반구분"])&
+                (df["정역"]==row["정역"])&
+                (df["핸디구분"]==row["핸디구분"])]
 
-    base_dist = distribution(base)
+    stage1_dist = distribution(stage1)
 
-    general_all = df[(df["유형"]==row["유형"])&
-                     (df["홈원정"]==row["홈원정"])&
-                     (df["일반구분"]==row["일반구분"])]
+    # 2단계 (핸디 제거)
+    stage2 = df[(df["유형"]==row["유형"])&
+                (df["홈원정"]==row["홈원정"])&
+                (df["일반구분"]==row["일반구분"])&
+                (df["정역"]==row["정역"])]
 
-    general_dist = distribution(general_all)
+    stage2_dist = distribution(stage2)
 
-    league_all = df[df["리그"]==row["리그"]]
-    league_dist = distribution(league_all)
+    # 3단계 (정역 제거)
+    stage3 = df[(df["유형"]==row["유형"])&
+                (df["홈원정"]==row["홈원정"])&
+                (df["일반구분"]==row["일반구분"])]
 
-    # 팀스캔
-    team_home = df[(df["홈팀"]==row["홈팀"])]
-    team_away = df[(df["원정팀"]==row["원정팀"])]
-
-    team_home_dist = distribution(team_home)
-    team_away_dist = distribution(team_away)
-
-    # 배당스캔
-    odds_win = distribution(df[df["승"]==row["승"]])
-    odds_draw = distribution(df[df["무"]==row["무"]])
-    odds_lose = distribution(df[df["패"]==row["패"]])
+    stage3_dist = distribution(stage3)
 
     # EV
-    ev_w = base_dist["wp"]/100*row["승"]-1
-    ev_d = base_dist["dp"]/100*row["무"]-1
-    ev_l = base_dist["lp"]/100*row["패"]-1
-
+    ev_w = stage1_dist["wp"]/100*row["승"]-1
+    ev_d = stage1_dist["dp"]/100*row["무"]-1
+    ev_l = stage1_dist["lp"]/100*row["패"]-1
     ev_dict = {"승":ev_w,"무":ev_d,"패":ev_l}
     best = max(ev_dict,key=ev_dict.get)
 
-    score = ai_score(base_dist, ev_dict[best])
+    score = ai_score(stage1_dist, ev_dict[best])
     grade = ai_grade(score)
 
-    secret = ""
-    if row["일반구분"]=="A" and base_dist["dp"]>=30:
-        secret="🎯 무 시그널"
-    if row["핸디구분"] in ["B","C"] and base_dist["lp"]>=50:
-        secret="⚠ 핸디 붕괴 위험"
-
     return {
-        "조건":row.to_dict(),
-        "기본조건분포":base_dist,
-        "일반전체":general_dist,
-        "리그전체":league_dist,
-        "팀홈":team_home_dist,
-        "팀원정":team_away_dist,
-        "배당승":odds_win,
-        "배당무":odds_draw,
-        "배당패":odds_lose,
+        "조건": row.to_dict(),
+        "1단계": stage1_dist,
+        "2단계": stage2_dist,
+        "3단계": stage3_dist,
         "EV":{k:round(v,3) for k,v in ev_dict.items()},
-        "AI등급":grade,
-        "추천":best,
-        "시크릿":secret
+        "AI등급": grade,
+        "추천": best
     }
 
 # ================= UI =================
@@ -264,7 +243,13 @@ def home():
         let res=await fetch(`/integrated-scan?year=${y}&round_no=${r}&match_no=${m}`,
         {headers:{"Authorization":"Bearer "+token}});
         let d=await res.json();
-        alert("추천:"+d.추천+" | AI:"+d.AI등급);
+
+        alert(
+        "추천:"+d.추천+" | AI:"+d.AI등급+"\\n\\n"+
+        "1단계\\n"+d["1단계"].승+"\\n"+d["1단계"].무+"\\n"+d["1단계"].패+"\\n\\n"+
+        "2단계\\n"+d["2단계"].승+"\\n"+d["2단계"].무+"\\n"+d["2단계"].패+"\\n\\n"+
+        "3단계\\n"+d["3단계"].승+"\\n"+d["3단계"].무+"\\n"+d["3단계"].패
+        );
     }
     </script>
     </body>
