@@ -1,3 +1,4 @@
+from fastapi.responses import HTMLResponse
 from fastapi import FastAPI, UploadFile, File, Depends, HTTPException
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
@@ -322,3 +323,43 @@ def odds_scan(odds:float,
         "무": f"{generate_bar(draw_pct)} {round(draw_pct,2)}%",
         "패": f"{generate_bar(lose_pct)} {round(lose_pct,2)}%"
     }
+
+# =========================
+# WEB APP UI
+# =========================
+
+@app.get("/", response_class=HTMLResponse)
+def home():
+    return """
+    <html>
+    <head>
+        <title>SecretCore</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+            body {
+                font-family: Arial;
+                background-color: #111;
+                color: white;
+                text-align: center;
+                padding: 40px;
+            }
+            h1 { color: #00ffcc; }
+            button {
+                padding: 15px;
+                width: 200px;
+                margin: 10px;
+                font-size: 16px;
+                border-radius: 10px;
+                border: none;
+                background-color: #00ffcc;
+                color: black;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>⚽ SecretCore</h1>
+        <p>AI 분석 엔진</p>
+        <button onclick="location.href='/docs'">API 테스트</button>
+    </body>
+    </html>
+    """
