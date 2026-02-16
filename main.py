@@ -272,7 +272,7 @@ def odds_scan(odds:float,
     }
 
 # =====================================================
-# SIMPLE MOBILE UI
+# FULL MOBILE WEB APP
 # =====================================================
 
 @app.get("/", response_class=HTMLResponse)
@@ -283,23 +283,122 @@ def home():
         <title>SecretCore</title>
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <style>
-            body {background:#111;color:white;text-align:center;padding:40px;}
-            h1 {color:#00ffcc;}
-            button {
+            body {
+                background:#0f0f0f;
+                color:white;
+                font-family:Arial;
+                padding:20px;
+                margin:0;
+            }
+            h1 {
+                color:#00ffcc;
+                text-align:center;
+            }
+            .card {
+                background:#1c1c1c;
                 padding:15px;
-                width:200px;
-                margin:10px;
-                border-radius:10px;
+                margin-bottom:15px;
+                border-radius:12px;
+                cursor:pointer;
+                box-shadow:0 0 10px rgba(0,255,204,0.2);
+            }
+            .card:hover {
+                background:#262626;
+            }
+            .grade {
+                font-weight:bold;
+                margin-top:5px;
+            }
+            .danger {
+                color:red;
+                font-weight:bold;
+            }
+            button {
+                padding:10px;
                 border:none;
+                border-radius:8px;
                 background:#00ffcc;
                 color:black;
                 font-weight:bold;
+                margin-bottom:15px;
             }
         </style>
     </head>
     <body>
-        <h1>⚽ SecretCore</h1>
-        <button onclick="location.href='/docs'">API 테스트</button>
+
+        <h1>⚽ SecretCore AI</h1>
+
+        <button onclick="loadMatches()">경기 불러오기</button>
+        <div id="matches"></div>
+
+        <script>
+
+        let token = localStorage.getItem("token");
+
+        async function autoLogin(){
+            let form = new URLSearchParams();
+            form.append("username","admin");
+            form.append("password","1234");
+
+            let res = await fetch("/login",{
+                method:"POST",
+                headers:{"Content-Type":"application/x-www-form-urlencoded"},
+                body:form
+            });
+
+            let data = await res.json();
+            token = data.access_token;
+            localStorage.setItem("token",token);
+        }
+
+        async function loadMatches(){
+
+            if(!token){
+                await autoLogin();
+            }
+
+            let res = await fetch("/matches",{
+                headers:{ "Authorization":"Bearer "+token }
+            });
+
+            let data = await res.json();
+            let html="";
+
+            data.forEach(m=>{
+                html+=`
+                <div class="card" onclick="analyze(${m.년도},'${m.회차}',${m.순번})">
+                    <b>${m.홈팀}</b> vs <b>${m.원정팀}</b><br>
+                    ${m.년도} ${m.회차} / ${m.유형}
+                </div>`;
+            });
+
+            document.getElementById("matches").innerHTML=html;
+        }
+
+        async function analyze(year,round_no,match_no){
+
+            let res = await fetch(
+                `/ultimate-analysis?year=${year}&round_no=${round_no}&match_no=${match_no}`,
+                { headers:{ "Authorization":"Bearer "+token } }
+            );
+
+            let data = await res.json();
+
+            let warning = "";
+            if(data.핸디상태 && data.핸디상태.includes("붕괴")){
+                warning = "\\n⚠️ " + data.핸디상태;
+            }
+
+            alert(
+                "AI등급: " + data.AI등급 +
+                "\\n추천: " + data.추천 +
+                "\\n승률: " + data.분포.승 +
+                warning
+            );
+        }
+
+        </script>
+
     </body>
     </html>
     """
