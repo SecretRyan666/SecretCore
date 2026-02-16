@@ -1,18 +1,19 @@
-from fastapi import FastAPI, UploadFile, File, Depends, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, UploadFile, File, Depends, HTTPException, Form
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse, RedirectResponse
 from jose import JWTError, jwt
 from datetime import datetime, timedelta
 import pandas as pd
-import os
 from io import BytesIO
+import os
 
 # =========================
 # APP INIT
 # =========================
 
 app = FastAPI()
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -34,56 +35,54 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 fake_user = {"username": "admin", "password": "1234"}
 
 def create_access_token(data: dict):
-    to_encode = data.copy()
     expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    data.update({"exp": expire})
+    return jwt.encode(data, SECRET_KEY, algorithm=ALGORITHM)
 
 def get_current_user(token: str = Depends(oauth2_scheme)):
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        username = payload.get("sub")
-        if username is None:
-            raise HTTPException(status_code=401)
-        return username
-    except JWTError:
+        return payload.get("sub")
+    except:
         raise HTTPException(status_code=401)
 
 @app.post("/login")
 def login(form_data: OAuth2PasswordRequestForm = Depends()):
-    if form_data.username != fake_user["username"] or form_data.password != fake_user["password"]:
+    if form_data.username != "admin" or form_data.password != "1234":
         raise HTTPException(status_code=401)
     token = create_access_token({"sub": form_data.username})
     return {"access_token": token, "token_type": "bearer"}
 
 # =========================
-# GLOBAL DATA (영구저장)
+# GLOBAL DATA + SAVE
 # =========================
 
-DATA_FILE = "stored_data.xlsx"
+DATA_FILE = "data_store.csv"
 CURRENT_DF = pd.DataFrame()
 
-def load_saved_data():
-    global CURRENT_DF
-    if os.path.exists(DATA_FILE):
-        CURRENT_DF = pd.read_excel(DATA_FILE)
-        CURRENT_DF["결과"] = CURRENT_DF["결과"].astype(str).str.strip()
+if os.path.exists(DATA_FILE):
+    CURRENT_DF = pd.read_csv(DATA_FILE)
 
-load_saved_data()
+def save_data(df):
+    df.to_csv(DATA_FILE, index=False)
 
 # =========================
-# UTIL
+# BAR
 # =========================
 
-def generate_bar(percent):
-    filled = int(percent / 5)
-    return "█" * filled + "-" * (20 - filled)
+def bar(p):
+    filled = int(p/5)
+    return "█"*filled + "-"*(20-filled)
 
-def advanced_ai_score(win_pct, draw_pct, lose_pct, ev_best, handi_status):
-    score = max(win_pct, draw_pct, lose_pct)
+# =========================
+# ADVANCED AI SCORE
+# =========================
+
+def ai_grade(win, draw, lose, ev_best, handi):
+    score = max(win, draw, lose)
     if ev_best > 0: score += 5
-    if draw_pct >= 40: score -= 7
-    if "붕괴" in handi_status: score -= 10
+    if draw >= 40: score -= 7
+    if "붕괴" in handi: score -= 10
 
     if score > 80: return "S+"
     if score > 70: return "S"
@@ -92,146 +91,161 @@ def advanced_ai_score(win_pct, draw_pct, lose_pct, ev_best, handi_status):
     return "C"
 
 # =========================
-# UPLOAD (영구저장 포함)
+# UPLOAD
 # =========================
 
 @app.post("/upload-data")
-def upload_data(file: UploadFile = File(...), user: str = Depends(get_current_user)):
+def upload_data(file: UploadFile = File(...),
+                user: str = Depends(get_current_user)):
+
     global CURRENT_DF
 
     raw = file.file.read()
-    df = pd.read_excel(BytesIO(raw))
+
+    if file.filename.endswith(".csv"):
+        df = pd.read_csv(BytesIO(raw))
+    else:
+        df = pd.read_excel(BytesIO(raw))
+
+    required = [
+        "년도","회차","순번","리그",
+        "홈팀","원정팀","유형",
+        "일반구분","핸디구분","정역","홈원정",
+        "결과","승","무","패"
+    ]
+
+    for col in required:
+        if col not in df.columns:
+            raise HTTPException(400, f"Missing {col}")
 
     df["결과"] = df["결과"].astype(str).str.strip()
-    df = df[df["유형"].isin(["일반", "핸디1"])]
+    df = df[df["유형"].isin(["일반","핸디1"])]
 
-    df.to_excel(DATA_FILE, index=False)
     CURRENT_DF = df
+    save_data(df)
 
-    target_games = df[df["결과"] == "경기전"]
+    target = df[df["결과"]=="경기전"]
 
-    return {
-        "total_games": int(len(df)),
-        "target_games": int(len(target_games))
-    }
+    return {"total": len(df), "경기전": len(target)}
 
 # =========================
-# MATCH LIST
+# MATCHES
 # =========================
 
 @app.get("/matches")
-def get_matches(user: str = Depends(get_current_user)):
+def matches(user:str=Depends(get_current_user)):
     df = CURRENT_DF
-    matches = df[df["결과"] == "경기전"]
-    return matches[["년도","회차","순번","홈팀","원정팀","유형"]].to_dict("records")
+    m = df[df["결과"]=="경기전"]
+    return m[["년도","회차","순번","홈팀","원정팀","유형"]].to_dict("records")
 
 # =========================
-# ULTIMATE ANALYSIS
+# ULTIMATE ENGINE
 # =========================
 
 @app.get("/ultimate-analysis")
-def ultimate_analysis(year:int, round_no:str, match_no:int,
-                      user:str=Depends(get_current_user)):
+def ultimate(year:int, round_no:str, match_no:int,
+             user:str=Depends(get_current_user)):
 
     df = CURRENT_DF
 
-    target = df[(df["년도"]==year)&
-                (df["회차"]==round_no)&
-                (df["순번"]==match_no)]
+    t = df[(df["년도"]==year)&
+           (df["회차"]==round_no)&
+           (df["순번"]==match_no)]
 
-    if target.empty:
-        raise HTTPException(status_code=404)
+    if t.empty: raise HTTPException(404)
 
-    row = target.iloc[0]
+    row = t.iloc[0]
 
-    base = df[(df["유형"]==row["유형"])&
-              (df["일반구분"]==row["일반구분"])&
-              (df["핸디구분"]==row["핸디구분"])&
-              (df["정역"]==row["정역"])&
-              (df["홈원정"]==row["홈원정"])]
+    base = df[
+        (df["유형"]==row["유형"])&
+        (df["일반구분"]==row["일반구분"])&
+        (df["핸디구분"]==row["핸디구분"])&
+        (df["정역"]==row["정역"])&
+        (df["홈원정"]==row["홈원정"])
+    ]
 
     total = len(base)
-    counts = base["결과"].value_counts()
+    vc = base["결과"].value_counts()
 
-    win = counts.get("승",0)
-    draw = counts.get("무",0)
-    lose = counts.get("패",0)
+    win = vc.get("승",0)
+    draw = vc.get("무",0)
+    lose = vc.get("패",0)
 
-    win_pct = win/total*100 if total else 0
-    draw_pct = draw/total*100 if total else 0
-    lose_pct = lose/total*100 if total else 0
+    win_p = win/total*100 if total else 0
+    draw_p = draw/total*100 if total else 0
+    lose_p = lose/total*100 if total else 0
 
-    ev_win = win_pct/100 * row["승"] - 1
-    ev_draw = draw_pct/100 * row["무"] - 1
-    ev_lose = lose_pct/100 * row["패"] - 1
+    ev_w = win_p/100*row["승"]-1
+    ev_d = draw_p/100*row["무"]-1
+    ev_l = lose_p/100*row["패"]-1
 
-    ev_dict = {"승":ev_win,"무":ev_draw,"패":ev_lose}
-    best_pick = max(ev_dict, key=ev_dict.get)
+    ev_dict = {"승":ev_w,"무":ev_d,"패":ev_l}
+    best = max(ev_dict, key=ev_dict.get)
 
     handi_df = df[df["유형"]=="핸디1"]
-    collapse_rate = 0
-    if not handi_df.empty:
-        total_h = len(handi_df)
-        lose_h = handi_df["결과"].value_counts().get("패",0)
-        collapse_rate = lose_h/total_h*100 if total_h else 0
+    h_total = len(handi_df)
+    h_vc = handi_df["결과"].value_counts()
+    h_lose = h_vc.get("패",0)
+    collapse = h_lose/h_total*100 if h_total else 0
+    handi = f"붕괴 {round(collapse,1)}%" if collapse>=55 else "안정"
 
-    handi_status = "안정"
-    if collapse_rate >= 55:
-        handi_status = f"붕괴위험 {round(collapse_rate,1)}%"
-
-    ai_grade = advanced_ai_score(
-        win_pct, draw_pct, lose_pct,
-        ev_dict[best_pick], handi_status
-    )
+    grade = ai_grade(win_p,draw_p,lose_p,ev_dict[best],handi)
 
     return {
-        "기본정보": row.to_dict(),
-        "분포": {
-            "총경기": total,
-            "승": f"{generate_bar(win_pct)} {round(win_pct,2)}% ({win})",
-            "무": f"{generate_bar(draw_pct)} {round(draw_pct,2)}% ({draw})",
-            "패": f"{generate_bar(lose_pct)} {round(lose_pct,2)}% ({lose})"
+        "기본":row.to_dict(),
+        "분포":{
+            "총":total,
+            "승":f"{bar(win_p)} {round(win_p,2)}%",
+            "무":f"{bar(draw_p)} {round(draw_p,2)}%",
+            "패":f"{bar(lose_p)} {round(lose_p,2)}%"
         },
-        "EV": {
-            "승": round(ev_win,3),
-            "무": round(ev_draw,3),
-            "패": round(ev_lose,3)
-        },
-        "AI등급": ai_grade,
-        "핸디상태": handi_status,
-        "최종추천": best_pick
+        "EV":{k:round(v,3) for k,v in ev_dict.items()},
+        "AI등급":grade,
+        "핸디":handi,
+        "추천":best
     }
 
 # =========================
-# WEB APP UI
+# WEB UI
 # =========================
 
 @app.get("/", response_class=HTMLResponse)
-def home():
+def login_page():
     return """
     <html>
-    <head>
-    <title>SecretCore FULL ENGINE</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-    body { background:#111; color:white; text-align:center; font-family:Arial; padding:40px;}
-    h1 {color:#00ffcc;}
-    button {
-        padding:15px;
-        margin:10px;
-        width:200px;
-        font-size:16px;
-        border-radius:10px;
-        border:none;
-        background:#00ffcc;
-        color:black;
-    }
-    </style>
-    </head>
-    <body>
-    <h1>⚽ SecretCore FULL ENGINE</h1>
-    <p>AI Sports Betting Engine</p>
-    <button onclick="location.href='/docs'">API 테스트</button>
+    <body style="background:#111;color:white;text-align:center;padding:50px">
+    <h2>SecretCore Login</h2>
+    <form method="post" action="/web-login">
+    <input name="username" placeholder="ID"><br><br>
+    <input name="password" type="password" placeholder="PW"><br><br>
+    <button type="submit">Login</button>
+    </form>
     </body>
     </html>
     """
+
+@app.post("/web-login")
+def web_login(username:str=Form(...), password:str=Form(...)):
+    if username!="admin" or password!="1234":
+        return HTMLResponse("<h3>Login Failed</h3>")
+    return RedirectResponse("/dashboard", status_code=302)
+
+@app.get("/dashboard", response_class=HTMLResponse)
+def dashboard():
+    return """
+    <html>
+    <body style="background:#111;color:white;text-align:center;padding:50px">
+    <h1>⚽ SecretCore</h1>
+    <button onclick="location.href='/matches-page'">경기 목록</button>
+    </body>
+    </html>
+    """
+
+@app.get("/matches-page", response_class=HTMLResponse)
+def matches_page():
+    df = CURRENT_DF
+    m = df[df["결과"]=="경기전"]
+    html="<h2>경기전 목록</h2>"
+    for _,r in m.iterrows():
+        html+=f"<p>{r['년도']} {r['회차']} {r['순번']} {r['홈팀']} vs {r['원정팀']} ({r['유형']})</p>"
+    return HTMLResponse(f"<html><body style='background:#111;color:white'>{html}</body></html>")
