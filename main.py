@@ -103,6 +103,9 @@ def upload_data(file: UploadFile = File(...),
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"엑셀 로드 실패: {str(e)}")
 
+    # ✅ 컬럼 공백 제거
+    df.columns = df.columns.str.strip()
+
     required = [
         "년도","회차","순번","리그",
         "홈팀","원정팀","유형",
@@ -112,23 +115,25 @@ def upload_data(file: UploadFile = File(...),
 
     for col in required:
         if col not in df.columns:
-            raise HTTPException(400, f"Missing column: {col}")
+            raise HTTPException(status_code=400, detail=f"Missing column: {col}")
 
     df["결과"] = df["결과"].astype(str).str.strip()
-    df["승"] = df["승"].astype(float)
-    df["무"] = df["무"].astype(float)
-    df["패"] = df["패"].astype(float)
+
+    # ✅ 안전 숫자 변환
+    df["승"] = pd.to_numeric(df["승"], errors="coerce").fillna(0)
+    df["무"] = pd.to_numeric(df["무"], errors="coerce").fillna(0)
+    df["패"] = pd.to_numeric(df["패"], errors="coerce").fillna(0)
 
     df = df[df["유형"].isin(["일반","핸디1"])]
 
     CURRENT_DF = df
     save_data(df)
 
-    target = df[df["결과"]=="경기전"]
+    target = df[df["결과"] == "경기전"]
 
     return {
-        "total_games": len(df),
-        "target_games": len(target)
+        "total_games": int(len(df)),
+        "target_games": int(len(target))
     }
 
 # ================= MATCH LIST =================
