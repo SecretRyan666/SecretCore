@@ -153,9 +153,13 @@ def ultimate(year:int, round_no:str, match_no:int,
     t2,w2,d2,l2 = calc(base2)
     t3,w3,d3,l3 = calc(base3)
 
-    ev_w = w1/100*row["승"]-1
-    ev_d = d1/100*row["무"]-1
-    ev_l = l1/100*row["패"]-1
+    odd_win = row["승"] if pd.notna(row["승"]) else 0
+    odd_draw = row["무"] if pd.notna(row["무"]) else 0
+    odd_lose = row["패"] if pd.notna(row["패"]) else 0
+
+    ev_w = win_p/100 * odd_win - 1
+    ev_d = draw_p/100 * odd_draw - 1
+    ev_l = lose_p/100 * odd_lose - 1
 
     ev_dict = {"승":ev_w,"무":ev_d,"패":ev_l}
     best = max(ev_dict, key=ev_dict.get)
