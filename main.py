@@ -1,263 +1,324 @@
-import os
+from fastapi import FastAPI, UploadFile, File, Depends, HTTPException
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi.middleware.cors import CORSMiddleware
+from jose import JWTError, jwt
 from datetime import datetime, timedelta
+import pandas as pd
 from io import BytesIO
 
-import pandas as pd
-from fastapi import FastAPI, Depends, HTTPException, status, File, UploadFile
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from jose import JWTError, jwt
-from passlib.context import CryptContext
-from sqlalchemy.orm import Session
-
-from database import engine, SessionLocal
-from models import Base, User, AnalysisRecord
-
 # =========================
-# CONFIG
+# APP INIT
 # =========================
-SECRET_KEY = os.getenv("SECRET_KEY", "local_dev_secret_key")
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60
 
 app = FastAPI()
 
-Base.metadata.create_all(bind=engine)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# =========================
+# AUTH
+# =========================
+
+SECRET_KEY = "secretcorekey"
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 600
+
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
-# =========================
-# DB SESSION
-# =========================
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+fake_user = {
+    "username": "admin",
+    "password": "1234"
+}
 
-# =========================
-# PASSWORD
-# =========================
-def hash_password(password: str):
-    return pwd_context.hash(password)
-
-def verify_password(plain_password, hashed_password):
-    return pwd_context.verify(plain_password, hashed_password)
-
-# =========================
-# JWT
-# =========================
-def create_access_token(data: dict, expires_delta: timedelta = None):
+def create_access_token(data: dict):
     to_encode = data.copy()
-    expire = datetime.utcnow() + (
-        expires_delta or timedelta(minutes=15)
-    )
+    expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
-def get_current_user(
-    token: str = Depends(oauth2_scheme),
-    db: Session = Depends(get_db)
-):
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Invalid authentication",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-
+def get_current_user(token: str = Depends(oauth2_scheme)):
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        username: str = payload.get("sub")
+        username = payload.get("sub")
         if username is None:
-            raise credentials_exception
+            raise HTTPException(status_code=401)
+        return username
     except JWTError:
-        raise credentials_exception
+        raise HTTPException(status_code=401)
 
-    user = db.query(User).filter(User.username == username).first()
-    if user is None:
-        raise credentials_exception
-
-    return user
-
-# =========================
-# ADMIN AUTO CREATE
-# =========================
-@app.on_event("startup")
-def create_admin():
-    db = SessionLocal()
-    admin = db.query(User).filter(User.username == "admin").first()
-    if not admin:
-        new_admin = User(
-            username="admin",
-            password=hash_password("admin123"),
-            is_approved=True
-        )
-        db.add(new_admin)
-        db.commit()
-    db.close()
+@app.post("/login")
+def login(form_data: OAuth2PasswordRequestForm = Depends()):
+    if (
+        form_data.username != fake_user["username"] or
+        form_data.password != fake_user["password"]
+    ):
+        raise HTTPException(status_code=401)
+    token = create_access_token({"sub": form_data.username})
+    return {"access_token": token, "token_type": "bearer"}
 
 # =========================
-# SECRET ENGINE
+# GLOBAL DATA
 # =========================
-def create_key(row):
-    return f"{row['유형']}|{row['일반구분']}|{row['핸디구분']}|{row['정역']}|{row['홈원정']}"
+
+CURRENT_DF = pd.DataFrame()
+
+# =========================
+# BAR
+# =========================
 
 def generate_bar(percent):
     filled = int(percent / 5)
     return "█" * filled + "-" * (20 - filled)
 
-def secret_engine(df):
+# =========================
+# ADVANCED AI SCORE
+# =========================
 
-    df["KEY"] = df.apply(create_key, axis=1)
+def advanced_ai_score(win_pct, draw_pct, lose_pct, ev_best, handi_status):
+    score = max(win_pct, draw_pct, lose_pct)
 
-    results = []
+    if ev_best > 0:
+        score += 5
+    if draw_pct >= 40:
+        score -= 7
+    if handi_status.startswith("붕괴"):
+        score -= 10
 
-    grouped = df.groupby("KEY")
-
-    for key, group in grouped:
-
-        total = len(group)
-        win = (group["결과"] == "승").sum()
-        draw = (group["결과"] == "무").sum()
-        lose = (group["결과"] == "패").sum()
-
-        win_p = round(win / total * 100, 2)
-        draw_p = round(draw / total * 100, 2)
-        lose_p = round(lose / total * 100, 2)
-
-        results.append({
-            "KEY": key,
-            "total": total,
-            "승": f"{generate_bar(win_p)} {win_p}%",
-            "무": f"{generate_bar(draw_p)} {draw_p}%",
-            "패": f"{generate_bar(lose_p)} {lose_p}%"
-        })
-
-    return results
+    if score > 80:
+        return "S+"
+    elif score > 70:
+        return "S"
+    elif score > 60:
+        return "A"
+    elif score > 50:
+        return "B"
+    else:
+        return "C"
 
 # =========================
-# ROUTES
+# UPLOAD
 # =========================
-@app.get("/")
-def root():
-    return {"message": "SecretCore Service Running"}
 
-@app.post("/register")
-def register(username: str, password: str, db: Session = Depends(get_db)):
-    existing_user = db.query(User).filter(User.username == username).first()
-    if existing_user:
-        raise HTTPException(status_code=400, detail="Username already exists")
+@app.post("/upload-data")
+def upload_data(file: UploadFile = File(...),
+                user: str = Depends(get_current_user)):
 
-    new_user = User(
-        username=username,
-        password=hash_password(password),
-        is_approved=True  # 승인 자동 true
-    )
+    global CURRENT_DF
 
-    db.add(new_user)
-    db.commit()
+    raw = file.file.read()
 
-    return {"message": "User registered successfully"}
+    if file.filename.endswith(".csv"):
+        try:
+            df = pd.read_csv(BytesIO(raw), encoding="utf-8")
+        except:
+            df = pd.read_csv(BytesIO(raw), encoding="cp949")
+    else:
+        df = pd.read_excel(BytesIO(raw))
 
-@app.post("/login")
-def login(
-    form_data: OAuth2PasswordRequestForm = Depends(),
-    db: Session = Depends(get_db)
-):
-    user = db.query(User).filter(
-        User.username == form_data.username
-    ).first()
-
-    if not user or not verify_password(
-        form_data.password, user.password
-    ):
-        raise HTTPException(status_code=400, detail="Invalid credentials")
-
-    access_token = create_access_token(
-        data={"sub": user.username},
-        expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    )
-
-    return {"access_token": access_token, "token_type": "bearer"}
-
-@app.post("/analyze")
-def analyze_file(
-    file: UploadFile = File(...),
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    try:
-        filename = file.filename.lower()
-        raw = file.file.read()
-
-        if filename.endswith(".csv"):
-            try:
-                df = pd.read_csv(BytesIO(raw), encoding="utf-8")
-            except:
-                df = pd.read_csv(BytesIO(raw), encoding="cp949")
-
-        elif filename.endswith(".xlsx") or filename.endswith(".xls"):
-            df = pd.read_excel(BytesIO(raw))
-
-        else:
-            raise HTTPException(
-                status_code=400,
-                detail="Unsupported file type"
-            )
-
-        required_columns = [
-            "유형",
-            "일반구분",
-            "핸디구분",
-            "정역",
-            "홈원정",
-            "결과"
-        ]
-
-        for col in required_columns:
-            if col not in df.columns:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Missing required column: {col}"
-                )
-
-        engine_result = secret_engine(df)
-
-        record = AnalysisRecord(
-            filename=file.filename,
-            rows=len(df),
-            columns=len(df.columns),
-            owner=current_user
-        )
-
-        db.add(record)
-        db.commit()
-
-        return {
-            "message": "Secret analysis complete",
-            "result_count": len(engine_result),
-            "analysis_preview": engine_result[:10]
-        }
-
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-@app.get("/my-analyses")
-def my_analyses(
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    records = db.query(AnalysisRecord).filter(
-        AnalysisRecord.user_id == current_user.id
-    ).all()
-
-    return [
-        {
-            "filename": r.filename,
-            "rows": r.rows,
-            "columns": r.columns,
-            "created_at": r.created_at
-        }
-        for r in records
+    required_columns = [
+        "년도","회차","순번","리그",
+        "홈팀","원정팀",
+        "유형","일반구분","핸디구분",
+        "정역","홈원정","결과",
+        "승","무","패"
     ]
+
+    for col in required_columns:
+        if col not in df.columns:
+            raise HTTPException(status_code=400, detail=f"Missing column: {col}")
+
+    df["결과"] = df["결과"].astype(str).str.strip()
+
+    # 일반 + 핸디1만 유지
+    df = df[df["유형"].isin(["일반", "핸디1"])]
+
+    CURRENT_DF = df
+
+    target_games = df[df["결과"] == "경기전"]
+
+    return {
+        "total_games": int(len(df)),
+        "target_games": int(len(target_games))
+    }
+
+# =========================
+# MATCH LIST
+# =========================
+
+@app.get("/matches")
+def get_matches(user: str = Depends(get_current_user)):
+    df = CURRENT_DF
+    matches = df[df["결과"] == "경기전"]
+    return matches[["년도","회차","순번","홈팀","원정팀","유형"]].to_dict("records")
+
+# =========================
+# ULTIMATE ANALYSIS
+# =========================
+
+@app.get("/ultimate-analysis")
+def ultimate_analysis(year:int, round_no:str, match_no:int,
+                      user:str=Depends(get_current_user)):
+
+    df = CURRENT_DF
+
+    target = df[
+        (df["년도"]==year)&
+        (df["회차"]==round_no)&
+        (df["순번"]==match_no)
+    ]
+
+    if target.empty:
+        raise HTTPException(status_code=404)
+
+    row = target.iloc[0]
+
+    base = df[
+        (df["유형"]==row["유형"])&
+        (df["일반구분"]==row["일반구분"])&
+        (df["핸디구분"]==row["핸디구분"])&
+        (df["정역"]==row["정역"])&
+        (df["홈원정"]==row["홈원정"])
+    ]
+
+    total = len(base)
+    counts = base["결과"].value_counts()
+
+    win = counts.get("승",0)
+    draw = counts.get("무",0)
+    lose = counts.get("패",0)
+
+    win_pct = win/total*100 if total else 0
+    draw_pct = draw/total*100 if total else 0
+    lose_pct = lose/total*100 if total else 0
+
+    # EV
+    ev_win = win_pct/100 * row["승"] - 1
+    ev_draw = draw_pct/100 * row["무"] - 1
+    ev_lose = lose_pct/100 * row["패"] - 1
+
+    ev_dict = {"승":ev_win,"무":ev_draw,"패":ev_lose}
+    best_pick = max(ev_dict, key=ev_dict.get)
+
+    # 동일조건 핸디 붕괴 체크
+    handi_df = df[
+        (df["유형"]=="핸디1") &
+        (df["일반구분"]==row["일반구분"]) &
+        (df["정역"]==row["정역"]) &
+        (df["홈원정"]==row["홈원정"])
+    ]
+
+    collapse_rate = 0
+    if not handi_df.empty:
+        h_counts = handi_df["결과"].value_counts()
+        total_h = len(handi_df)
+        lose_h = h_counts.get("패",0)
+        collapse_rate = lose_h/total_h*100 if total_h else 0
+
+    handi_status = "안정"
+    if collapse_rate >= 55:
+        handi_status = f"붕괴위험 {round(collapse_rate,1)}%"
+
+    # AI 등급
+    ai_grade = advanced_ai_score(
+        win_pct,
+        draw_pct,
+        lose_pct,
+        ev_dict[best_pick],
+        handi_status
+    )
+
+    return {
+        "기본정보": row.to_dict(),
+        "분포": {
+            "총경기": total,
+            "승": f"{generate_bar(win_pct)} {round(win_pct,2)}% ({win})",
+            "무": f"{generate_bar(draw_pct)} {round(draw_pct,2)}% ({draw})",
+            "패": f"{generate_bar(lose_pct)} {round(lose_pct,2)}% ({lose})"
+        },
+        "EV": {
+            "승": round(ev_win,3),
+            "무": round(ev_draw,3),
+            "패": round(ev_lose,3)
+        },
+        "AI등급": ai_grade,
+        "핸디상태": handi_status,
+        "최종추천": best_pick
+    }
+
+# =========================
+# TEAM SCAN
+# =========================
+
+@app.get("/team-scan")
+def team_scan(team:str, home_away:str,
+              user:str=Depends(get_current_user)):
+
+    df = CURRENT_DF
+
+    team_df = df[
+        ((df["홈팀"]==team)&(home_away=="홈")) |
+        ((df["원정팀"]==team)&(home_away=="원정"))
+    ]
+
+    result = {}
+
+    for game_type in ["일반","핸디1"]:
+        sub = team_df[team_df["유형"]==game_type]
+        if sub.empty:
+            continue
+
+        counts = sub["결과"].value_counts()
+        total = len(sub)
+
+        win = counts.get("승",0)
+        draw = counts.get("무",0)
+        lose = counts.get("패",0)
+
+        win_pct = win/total*100 if total else 0
+        draw_pct = draw/total*100 if total else 0
+        lose_pct = lose/total*100 if total else 0
+
+        result[game_type] = {
+            "총경기": total,
+            "승": f"{generate_bar(win_pct)} {round(win_pct,2)}%",
+            "무": f"{generate_bar(draw_pct)} {round(draw_pct,2)}%",
+            "패": f"{generate_bar(lose_pct)} {round(lose_pct,2)}%"
+        }
+
+    return result
+
+# =========================
+# ODDS SCAN
+# =========================
+
+@app.get("/odds-scan")
+def odds_scan(odds:float,
+              user:str=Depends(get_current_user)):
+
+    df = CURRENT_DF
+
+    # float 안전 비교
+    sub = df[abs(df["승"] - odds) < 0.001]
+
+    counts = sub["결과"].value_counts()
+    total = len(sub)
+
+    win = counts.get("승",0)
+    draw = counts.get("무",0)
+    lose = counts.get("패",0)
+
+    win_pct = win/total*100 if total else 0
+    draw_pct = draw/total*100 if total else 0
+    lose_pct = lose/total*100 if total else 0
+
+    return {
+        "총경기": total,
+        "승": f"{generate_bar(win_pct)} {round(win_pct,2)}%",
+        "무": f"{generate_bar(draw_pct)} {round(draw_pct,2)}%",
+        "패": f"{generate_bar(lose_pct)} {round(lose_pct,2)}%"
+    }
