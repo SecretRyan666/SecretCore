@@ -103,6 +103,11 @@ def upload_data(file: UploadFile = File(...)):
     global CURRENT_DF
     raw = file.file.read()
     df = pd.read_csv(BytesIO(raw), encoding="utf-8")
+
+    print("컬럼 개수:", len(df.columns))
+    print("컬럼 리스트:", df.columns.tolist())
+    print("첫 행 데이터:", df.iloc[0].tolist())
+    print("shape:", df.shape)
     CURRENT_DF = df
     save_data(df)
     return {"total": len(df)}
