@@ -6,7 +6,7 @@ from io import BytesIO
 app = FastAPI()
 
 # =====================================================
-# 절대참조 컬럼 인덱스 (A~Q)
+# A~Q 절대참조 인덱스
 # =====================================================
 
 COL_NO        = 0
@@ -48,6 +48,7 @@ def distribution(df):
         return {"총":0,"승":0,"무":0,"패":0,"wp":0,"dp":0,"lp":0}
 
     result_col = df.iloc[:, COL_RESULT]
+
     win  = (result_col == "승").sum()
     draw = (result_col == "무").sum()
     lose = (result_col == "패").sum()
@@ -80,8 +81,11 @@ def ev_ai(dist, row):
     score = max(dist["wp"],dist["dp"],dist["lp"])
     grade = "S" if score>=60 else "A" if score>=50 else "B"
 
-    return {"추천":best,"AI":grade}
-
+    return {
+        "EV":{"승":round(ev_w,3),"무":round(ev_d,3),"패":round(ev_l,3)},
+        "추천":best,
+        "AI":grade
+    }
 
 # =====================================================
 # 업로드
@@ -100,9 +104,8 @@ def upload(file: UploadFile = File(...)):
     CURRENT_DF = df
     return {"rows":len(df)}
 
-
 # =====================================================
-# 페이지1 - 경기목록 (경기전 + 일반/핸디1만)
+# 페이지1 - 경기목록
 # =====================================================
 
 @app.get("/matches")
@@ -113,7 +116,6 @@ def matches():
         ((df.iloc[:, COL_TYPE] == "일반") | (df.iloc[:, COL_TYPE] == "핸디1"))
     ]
     return m.values.tolist()
-
 
 # =====================================================
 # 페이지2 - 통합스캔
@@ -136,6 +138,7 @@ def page2(year:int, match:int):
 
     base_df = run_filter(df, base_cond)
     base_dist = distribution(base_df)
+
     ev_data = ev_ai(base_dist,row)
 
     return {
@@ -149,6 +152,27 @@ def page2(year:int, match:int):
         "EV":ev_data
     }
 
+# =====================================================
+# 페이지3 - 팀스캔
+# =====================================================
+
+@app.get("/page3")
+def page3(team:str):
+    df = CURRENT_DF
+    team_df = df[(df.iloc[:,COL_HOME]==team) | (df.iloc[:,COL_AWAY]==team)]
+    return distribution(team_df)
+
+# =====================================================
+# 페이지4 - 배당스캔
+# =====================================================
+
+@app.get("/page4")
+def page4(win:float, draw:float, lose:float):
+    df = CURRENT_DF
+    odds_df = df[(df.iloc[:,COL_WIN_ODDS]==win) &
+                 (df.iloc[:,COL_DRAW_ODDS]==draw) &
+                 (df.iloc[:,COL_LOSE_ODDS]==lose)]
+    return distribution(odds_df)
 
 # =====================================================
 # UI
@@ -161,28 +185,28 @@ def home():
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
-body{background:#0f1720;color:white;font-family:Arial;margin:0;padding:20px}
-h1{font-size:28px}
+body{background:#0f1720;color:white;font-family:Arial;margin:0;padding:40px;font-size:20px}
 .card{
   background:#1e293b;
-  padding:20px;
-  margin-bottom:20px;
-  border-radius:16px;
+  padding:30px;
+  margin-bottom:30px;
+  border-radius:20px;
 }
 .info-btn{
   float:right;
   background:#22d3ee;
   color:black;
   border:none;
-  padding:8px 14px;
-  border-radius:10px;
+  padding:12px 20px;
+  border-radius:14px;
+  font-size:18px;
   font-weight:bold;
 }
 .bar{
-  height:14px;
+  height:18px;
   background:#334155;
   border-radius:10px;
-  margin-bottom:10px;
+  margin-bottom:12px;
   overflow:hidden;
 }
 .bar-inner{
@@ -228,11 +252,6 @@ async function load(){
 </html>
 """
 
-
-# =====================================================
-# 페이지2 화면
-# =====================================================
-
 @app.get("/detail", response_class=HTMLResponse)
 def detail(year:int, match:int):
 
@@ -244,9 +263,9 @@ def detail(year:int, match:int):
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
-body{{background:#0f1720;color:white;font-family:Arial;padding:20px}}
-.card{{background:#1e293b;padding:20px;border-radius:16px}}
-.bar{{height:14px;background:#334155;border-radius:10px;margin-bottom:10px}}
+body{{background:#0f1720;color:white;font-family:Arial;padding:40px;font-size:20px}}
+.card{{background:#1e293b;padding:30px;border-radius:20px}}
+.bar{{height:18px;background:#334155;border-radius:10px;margin-bottom:12px}}
 .bar-inner{{height:100%;background:#22c55e}}
 </style>
 </head>
