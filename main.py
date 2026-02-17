@@ -1,49 +1,15 @@
-from fastapi import FastAPI, UploadFile, File, Depends, HTTPException
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi import FastAPI, UploadFile, File
 from fastapi.responses import HTMLResponse
-from jose import jwt
-from datetime import datetime, timedelta
 import pandas as pd
 from io import BytesIO
 import os
 import math
 
+# =====================================================
+# APP
+# =====================================================
+
 app = FastAPI()
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# ================= AUTH =================
-
-SECRET_KEY = "secretcorekey"
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 600
-
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
-FAKE_USER = {"username": "admin", "password": "1234"}
-
-def create_token(data: dict):
-    expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    data.update({"exp": expire})
-    return jwt.encode(data, SECRET_KEY, algorithm=ALGORITHM)
-
-def get_current_user(token: str = Depends(oauth2_scheme)):
-    return jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM]).get("sub")
-
-@app.post("/login")
-def login(form_data: OAuth2PasswordRequestForm = Depends()):
-    if form_data.username != FAKE_USER["username"] or form_data.password != FAKE_USER["password"]:
-        raise HTTPException(status_code=401)
-    token = create_token({"sub": form_data.username})
-    return {"access_token": token, "token_type": "bearer"}
-
-# ================= DATA =================
 
 DATA_FILE = "data_store.csv"
 CURRENT_DF = pd.DataFrame()
@@ -54,159 +20,211 @@ if os.path.exists(DATA_FILE):
 def save_data(df):
     df.to_csv(DATA_FILE, index=False)
 
-@app.post("/upload-data")
-def upload_data(file: UploadFile = File(...), user: str = Depends(get_current_user)):
-    global CURRENT_DF
-    raw = file.file.read()
-    df = pd.read_csv(BytesIO(raw), encoding="utf-8")
-    df = df.fillna("")
-    CURRENT_DF = df
-    save_data(df)
-    return {"rows": len(df)}
+# =====================================================
+# 고정 열 인덱스 (A~Q 절대참조)
+# =====================================================
 
-# ================= UTIL =================
+COL_NO = 0
+COL_YEAR = 1
+COL_ROUND = 2
+COL_MATCH = 3
+COL_SPORT = 4
+COL_LEAGUE = 5
+COL_HOME = 6
+COL_AWAY = 7
+COL_ODD_WIN = 8
+COL_ODD_DRAW = 9
+COL_ODD_LOSE = 10
+COL_GENERAL = 11
+COL_HANDI = 12
+COL_RESULT = 13
+COL_TYPE = 14
+COL_REV = 15
+COL_HOMEAWAY = 16
+
+# =====================================================
+# UTIL
+# =====================================================
+
+def safe_float(v):
+    try:
+        f = float(v)
+        if math.isnan(f):
+            return 0.0
+        return f
+    except:
+        return 0.0
 
 def bar(p):
-    filled = int(p/5)
+    filled = int(p / 5)
     return "█"*filled + "-"*(20-filled)
 
-def dist_calc(df):
+def distribution(df):
     total = len(df)
     if total == 0:
         return {"총":0,"승":"-","무":"-","패":"-","wp":0,"dp":0,"lp":0}
 
-    result_col = df.iloc[:,13]
-    win = (result_col=="승").sum()
-    draw = (result_col=="무").sum()
-    lose = (result_col=="패").sum()
+    results = df.iloc[:, COL_RESULT]
+
+    win = (results == "승").sum()
+    draw = (results == "무").sum()
+    lose = (results == "패").sum()
 
     wp = win/total*100
     dp = draw/total*100
     lp = lose/total*100
 
     return {
-        "총":total,
-        "승":f"{bar(wp)} {round(wp,2)}% ({win})",
-        "무":f"{bar(dp)} {round(dp,2)}% ({draw})",
-        "패":f"{bar(lp)} {round(lp,2)}% ({lose})",
-        "wp":wp,"dp":dp,"lp":lp
+        "총": int(total),
+        "승": f"{bar(wp)} {round(wp,2)}% ({win})",
+        "무": f"{bar(dp)} {round(dp,2)}% ({draw})",
+        "패": f"{bar(lp)} {round(lp,2)}% ({lose})",
+        "wp": float(wp),
+        "dp": float(dp),
+        "lp": float(lp)
     }
 
-def run_filter(df, conditions):
+# =====================================================
+# 루프 통합엔진 (절대참조)
+# =====================================================
+
+def loop_filter(df, cond):
     f = df.copy()
-    for col_idx, val in conditions.items():
-        f = f[f.iloc[:,col_idx]==val]
+    for col_idx, val in cond.items():
+        f = f[f.iloc[:, col_idx] == val]
     return f
 
-def ai_grade(score):
-    if score>=85: return "S"
-    if score>=70: return "A"
-    if score>=55: return "B"
-    return "C"
+# =====================================================
+# 업로드
+# =====================================================
 
-# ================= MATCH LIST (PAGE1) =================
+@app.post("/upload-data")
+def upload_data(file: UploadFile = File(...)):
+    global CURRENT_DF
+    raw = file.file.read()
+    df = pd.read_csv(BytesIO(raw), encoding="utf-8")
+    CURRENT_DF = df
+    save_data(df)
+    return {"total": len(df)}
+
+# =====================================================
+# 페이지1 경기목록
+# =====================================================
 
 @app.get("/matches")
-def matches(user:str=Depends(get_current_user)):
+def matches():
     df = CURRENT_DF
-    m = df[df.iloc[:,13]=="경기전"]
+    m = df[df.iloc[:, COL_RESULT] == "경기전"]
     return m.to_dict("records")
 
-# ================= INTEGRATED SCAN (PAGE2,3,4) =================
+# =====================================================
+# 페이지2 기본정보
+# =====================================================
 
-@app.get("/scan")
-def scan(year:int, round_no:str, match_no:int, user:str=Depends(get_current_user)):
-
+@app.get("/page2")
+def page2(year:int, match:int):
     df = CURRENT_DF
+    row = df[(df.iloc[:,COL_YEAR]==year) &
+             (df.iloc[:,COL_MATCH]==match)].iloc[0]
 
-    row = df[(df.iloc[:,1]==year)&
-             (df.iloc[:,2]==round_no)&
-             (df.iloc[:,3]==match_no)]
-
-    if row.empty:
-        raise HTTPException(404)
-
-    row = row.iloc[0]
-
-    base_cond = {
-        14:row.iloc[14],
-        16:row.iloc[16],
-        11:row.iloc[11],
-        15:row.iloc[15],
-        12:row.iloc[12]
+    cond = {
+        COL_TYPE: row.iloc[COL_TYPE],
+        COL_HOMEAWAY: row.iloc[COL_HOMEAWAY],
+        COL_GENERAL: row.iloc[COL_GENERAL],
+        COL_REV: row.iloc[COL_REV],
+        COL_HANDI: row.iloc[COL_HANDI]
     }
 
-    base = run_filter(df, base_cond)
-    base_dist = dist_calc(base)
+    base = loop_filter(df, cond)
+    return distribution(base)
 
-    general_all = run_filter(df,{14:row.iloc[14],16:row.iloc[16],11:row.iloc[11]})
-    general_dist = dist_calc(general_all)
+# =====================================================
+# 페이지3 팀스캔
+# =====================================================
 
-    team_home = run_filter(df,{6:row.iloc[6]})
-    team_home_dist = dist_calc(team_home)
+@app.get("/page3")
+def page3(team:str):
+    df = CURRENT_DF
+    team_df = df[(df.iloc[:,COL_HOME]==team) |
+                 (df.iloc[:,COL_AWAY]==team)]
+    return distribution(team_df)
 
-    team_away = run_filter(df,{7:row.iloc[7]})
-    team_away_dist = dist_calc(team_away)
+# =====================================================
+# 페이지4 배당스캔
+# =====================================================
 
-    odds_win = run_filter(df,{8:row.iloc[8]})
-    odds_win_dist = dist_calc(odds_win)
+@app.get("/page4")
+def page4(win:float, draw:float, lose:float):
+    df = CURRENT_DF
+    f = df[(df.iloc[:,COL_ODD_WIN]==win) &
+           (df.iloc[:,COL_ODD_DRAW]==draw) &
+           (df.iloc[:,COL_ODD_LOSE]==lose)]
+    return distribution(f)
 
-    ev = base_dist["wp"]/100 * float(row.iloc[8]) - 1
-    grade = ai_grade(max(base_dist["wp"],base_dist["dp"],base_dist["lp"]))
-
-    return {
-        "기본조건":base_dist,
-        "일반전체":general_dist,
-        "홈팀":team_home_dist,
-        "원정팀":team_away_dist,
-        "배당승":odds_win_dist,
-        "EV":round(ev,3),
-        "AI":grade
-    }
-
-# ================= UI =================
+# =====================================================
+# UI
+# =====================================================
 
 @app.get("/", response_class=HTMLResponse)
 def home():
     return """
 <html>
-<body style='background:#111;color:white;font-family:Arial;padding:15px'>
-<h2>⚽ SecretCore PRO</h2>
-<button onclick='load()'>경기목록</button>
-<div id='list'></div>
+<head>
+<style>
+body{background:#111;color:white;font-family:Arial}
+.card{background:#222;padding:10px;margin:10px;border-radius:10px}
+.center{text-align:center}
+.toggle{cursor:pointer;color:#00ffcc}
+.hidden{display:none}
+</style>
+</head>
+<body>
+
+<h2>SecretCore 통합설계</h2>
+<button onclick="load()">경기목록</button>
+<div id="list"></div>
 
 <script>
-let token;
-
-async function login(){
-    let f=new URLSearchParams();
-    f.append("username","admin");
-    f.append("password","1234");
-    let r=await fetch("/login",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:f});
-    let d=await r.json();
-    token=d.access_token;
-}
 
 async function load(){
-    if(!token) await login();
-    let r=await fetch("/matches",{headers:{"Authorization":"Bearer "+token}});
-    let data=await r.json();
+    let r=await fetch('/matches');
+    let d=await r.json();
     let html="";
-    data.forEach((m,i)=>{
-        html+=`<div style='margin-bottom:10px'>
-        ${m[5]} | <b>${m[6]}</b> vs <b>${m[7]}</b>
-        <button onclick="scan(${m[1]},'${m[2]}',${m[3]})">정보</button>
+    d.forEach((m,i)=>{
+        html+=`
+        <div class="card">
+        <b>${m[6]}</b> vs <b>${m[7]}</b><br>
+        ${m[14]}.${m[16]}.${m[11]}.${m[15]}.${m[12]}<br>
+        <span class="toggle" onclick="p2(${m[1]},${m[3]},${i})">정보</span> |
+        <span class="toggle" onclick="p3('${m[6]}')">${m[6]}</span> |
+        <span class="toggle" onclick="p3('${m[7]}')">${m[7]}</span> |
+        <span class="toggle" onclick="p4(${m[8]},${m[9]},${m[10]})">승무패</span>
+        <div id="d${i}" class="hidden"></div>
         </div>`;
     });
     document.getElementById("list").innerHTML=html;
 }
 
-async function scan(y,r,m){
-    let res=await fetch(`/scan?year=${y}&round_no=${r}&match_no=${m}`,
-    {headers:{"Authorization":"Bearer "+token}});
-    let d=await res.json();
-    alert("AI:"+d.AI+" EV:"+d.EV);
+async function p2(y,m,i){
+    let r=await fetch(`/page2?year=${y}&match=${m}`);
+    let d=await r.json();
+    let box=document.getElementById("d"+i);
+    box.innerHTML=`${d.승}<br>${d.무}<br>${d.패}`;
+    box.classList.toggle("hidden");
 }
+
+async function p3(t){
+    let r=await fetch(`/page3?team=${t}`);
+    let d=await r.json();
+    alert("팀분포\\n"+d.승+"\\n"+d.무+"\\n"+d.패);
+}
+
+async function p4(w,d,l){
+    let r=await fetch(`/page4?win=${w}&draw=${d}&lose=${l}`);
+    let x=await r.json();
+    alert("배당분포\\n"+x.승+"\\n"+x.무+"\\n"+x.패);
+}
+
 </script>
 </body>
 </html>
