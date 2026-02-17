@@ -69,35 +69,38 @@ def save_data(df):
 # UTIL
 # =====================================================
 
-def bar(p):
-    filled = int(p / 5)
-    return "█" * filled + "-" * (20 - filled)
-
-def run_filter(df, conditions: dict):
-    temp = df.copy()
-    for col, val in conditions.items():
-        temp = temp[temp[col] == val]
-    return temp
-
 def distribution(df):
     total = len(df)
+
     if total == 0:
-        return {"총": 0, "승": "-", "무": "-", "패": "-"}
+        return {
+            "총": 0,
+            "승": "-",
+            "무": "-",
+            "패": "-",
+            "wp": 0,
+            "dp": 0,
+            "lp": 0
+        }
 
     vc = df["결과"].value_counts()
-    win = vc.get("승", 0)
-    draw = vc.get("무", 0)
-    lose = vc.get("패", 0)
 
-    wp = win / total * 100
-    dp = draw / total * 100
-    lp = lose / total * 100
+    win = int(vc.get("승",0))
+    draw = int(vc.get("무",0))
+    lose = int(vc.get("패",0))
+
+    wp = (win/total*100) if total else 0
+    dp = (draw/total*100) if total else 0
+    lp = (lose/total*100) if total else 0
 
     return {
-        "총": total,
+        "총": int(total),
         "승": f"{bar(wp)} {round(wp,2)}% ({win})",
         "무": f"{bar(dp)} {round(dp,2)}% ({draw})",
-        "패": f"{bar(lp)} {round(lp,2)}% ({lose})"
+        "패": f"{bar(lp)} {round(lp,2)}% ({lose})",
+        "wp": float(wp),
+        "dp": float(dp),
+        "lp": float(lp)
     }
 
 # =====================================================
@@ -111,7 +114,11 @@ def upload_data(file: UploadFile = File(...),
     global CURRENT_DF
 
     raw = file.file.read()
+
+    # CSV 로드
     df = pd.read_csv(BytesIO(raw), encoding="utf-8")
+
+    # 컬럼 공백 제거
     df.columns = df.columns.str.strip()
 
     required = [
@@ -124,16 +131,27 @@ def upload_data(file: UploadFile = File(...),
         if col not in df.columns:
             raise HTTPException(400, f"Missing column: {col}")
 
+    # 결과값 정리
     df["결과"] = df["결과"].astype(str).str.strip()
-    df["승"] = pd.to_numeric(df["승"], errors="coerce")
-    df["무"] = pd.to_numeric(df["무"], errors="coerce")
-    df["패"] = pd.to_numeric(df["패"], errors="coerce")
+    df = df[df["결과"].isin(["승","무","패","경기전"])]
+
+    # 배당 숫자 변환 + NaN 제거
+    df["승"] = pd.to_numeric(df["승"], errors="coerce").fillna(0)
+    df["무"] = pd.to_numeric(df["무"], errors="coerce").fillna(0)
+    df["패"] = pd.to_numeric(df["패"], errors="coerce").fillna(0)
+
+    # 유형 필터
+    df = df[df["유형"].isin(["일반","핸디1"])]
 
     CURRENT_DF = df
     save_data(df)
 
-    target = df[df["결과"] == "경기전"]
-    return {"total_games": len(df), "target_games": len(target)}
+    target = df[df["결과"]=="경기전"]
+
+    return {
+        "total_games": int(len(df)),
+        "target_games": int(len(target))
+    }
 
 # =====================================================
 # MATCH LIST (1페이지)
