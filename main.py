@@ -103,6 +103,29 @@ def distribution(df):
         "lp": float(lp)
     }
 
+# ================= 통합 필터 엔진 =================
+
+def run_filter(df, conditions: dict):
+    """
+    conditions = {
+        "컬럼명": 값,
+        "컬럼명2": 값2,
+        ...
+    }
+    """
+    filtered = df.copy()
+
+    for col, val in conditions.items():
+        if col not in filtered.columns:
+            continue
+
+        if val is None:
+            continue
+
+        filtered = filtered[filtered[col] == val]
+
+    return filtered
+
 # =====================================================
 # UPLOAD
 # =====================================================
