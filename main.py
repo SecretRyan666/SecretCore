@@ -101,16 +101,55 @@ def loop_filter(df, cond):
 @app.post("/upload-data")
 def upload_data(file: UploadFile = File(...)):
     global CURRENT_DF
+
     raw = file.file.read()
     df = pd.read_csv(BytesIO(raw), encoding="utf-8")
+
+    # 공백 제거
+    df.columns = df.columns.str.strip()
+
+    # ===== 절대참조 컬럼 위치 =====
+    # A=0 NO.
+    # B=1 년도
+    # C=2 회차
+    # D=3 순번
+    # E=4 종목
+    # F=5 리그
+    # G=6 홈팀
+    # H=7 원정팀
+    # I=8 승
+    # J=9 무
+    # K=10 패
+    # L=11 일반구분
+    # M=12 핸디구분
+    # N=13 결과
+    # O=14 유형
+    # P=15 정역
+    # Q=16 홈원정
+
+    # ===== 숫자 강제 변환 (승/무/패) =====
+    df.iloc[:, 8] = pd.to_numeric(df.iloc[:, 8], errors="coerce").fillna(0)
+    df.iloc[:, 9] = pd.to_numeric(df.iloc[:, 9], errors="coerce").fillna(0)
+    df.iloc[:, 10] = pd.to_numeric(df.iloc[:, 10], errors="coerce").fillna(0)
+
+    # ===== 결과값 정리 =====
+    df.iloc[:, 13] = df.iloc[:, 13].astype(str).str.strip()
+
+    # ===== 유형 필터 (일반, 핸디1만 사용) =====
+    df = df[df.iloc[:, 14].isin(["일반", "핸디1"])]
 
     print("컬럼 개수:", len(df.columns))
     print("컬럼 리스트:", df.columns.tolist())
     print("첫 행 데이터:", df.iloc[0].tolist())
     print("shape:", df.shape)
+
     CURRENT_DF = df
     save_data(df)
-    return {"total": len(df)}
+
+    return {
+        "total": int(len(df)),
+        "경기전": int((df.iloc[:, 13] == "경기전").sum())
+    }
 
 # =====================================================
 # 페이지1 경기목록
@@ -119,7 +158,7 @@ def upload_data(file: UploadFile = File(...)):
 @app.get("/matches")
 def matches():
     df = CURRENT_DF
-    m = df[df.iloc[:, COL_RESULT] == "경기전 "]
+    m = df[df.iloc[:, COL_RESULT] == "경기전"]
     return m.to_dict("records")
 
 # =====================================================
