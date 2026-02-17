@@ -2,15 +2,12 @@ from fastapi import FastAPI, UploadFile, File, Depends, HTTPException
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
-from jose import jwt, JWTError
+from jose import jwt
 from datetime import datetime, timedelta
 import pandas as pd
 from io import BytesIO
 import os
-
-# =====================================================
-# APP INIT
-# =====================================================
+import math
 
 app = FastAPI()
 
@@ -22,9 +19,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# =====================================================
-# AUTH
-# =====================================================
+# ================= AUTH =================
 
 SECRET_KEY = "secretcorekey"
 ALGORITHM = "HS256"
@@ -39,11 +34,7 @@ def create_token(data: dict):
     return jwt.encode(data, SECRET_KEY, algorithm=ALGORITHM)
 
 def get_current_user(token: str = Depends(oauth2_scheme)):
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        return payload.get("sub")
-    except JWTError:
-        raise HTTPException(status_code=401)
+    return jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM]).get("sub")
 
 @app.post("/login")
 def login(form_data: OAuth2PasswordRequestForm = Depends()):
@@ -52,9 +43,7 @@ def login(form_data: OAuth2PasswordRequestForm = Depends()):
     token = create_token({"sub": form_data.username})
     return {"access_token": token, "token_type": "bearer"}
 
-# =====================================================
-# DATA (CSV 전용)
-# =====================================================
+# ================= DATA =================
 
 DATA_FILE = "data_store.csv"
 CURRENT_DF = pd.DataFrame()
@@ -65,189 +54,126 @@ if os.path.exists(DATA_FILE):
 def save_data(df):
     df.to_csv(DATA_FILE, index=False)
 
-# =====================================================
-# UTIL
-# =====================================================
-
-def bar(p):
-    filled = int(p / 5)
-    return "█" * filled + "-" * (20 - filled)
-
-def distribution(df):
-    total = len(df)
-
-    if total == 0:
-        return {
-            "총": 0,
-            "승": "-",
-            "무": "-",
-            "패": "-",
-            "wp": 0,
-            "dp": 0,
-            "lp": 0
-        }
-
-    vc = df["결과"].value_counts()
-
-    win = int(vc.get("승", 0))
-    draw = int(vc.get("무", 0))
-    lose = int(vc.get("패", 0))
-
-    wp = (win / total * 100) if total else 0
-    dp = (draw / total * 100) if total else 0
-    lp = (lose / total * 100) if total else 0
-
-    return {
-        "총": int(total),
-        "승": f"{bar(wp)} {round(wp,2)}% ({win})",
-        "무": f"{bar(dp)} {round(dp,2)}% ({draw})",
-        "패": f"{bar(lp)} {round(lp,2)}% ({lose})",
-        "wp": float(wp),
-        "dp": float(dp),
-        "lp": float(lp)
-    }
-
-# ================= 통합 필터 엔진 =================
-
-def run_filter(df, conditions: dict):
-    filtered = df.copy()
-
-    for col, val in conditions.items():
-        if col not in filtered.columns:
-            continue
-        if val is None:
-            continue
-        filtered = filtered[filtered[col] == val]
-
-    return filtered
-
-# =====================================================
-# UPLOAD
-# =====================================================
-
 @app.post("/upload-data")
-def upload_data(file: UploadFile = File(...),
-                user: str = Depends(get_current_user)):
-
+def upload_data(file: UploadFile = File(...), user: str = Depends(get_current_user)):
     global CURRENT_DF
-
     raw = file.file.read()
     df = pd.read_csv(BytesIO(raw), encoding="utf-8")
-    df.columns = df.columns.str.strip()
-
-    required = [
-        "년도","회차","순번","리그","홈팀","원정팀",
-        "유형","일반구분","핸디구분","정역","홈원정",
-        "결과","승","무","패"
-    ]
-
-    for col in required:
-        if col not in df.columns:
-            raise HTTPException(400, f"Missing column: {col}")
-
-    df["결과"] = df["결과"].astype(str).str.strip()
-    df = df[df["결과"].isin(["승","무","패","경기전"])]
-
-    df["승"] = pd.to_numeric(df["승"], errors="coerce").fillna(0)
-    df["무"] = pd.to_numeric(df["무"], errors="coerce").fillna(0)
-    df["패"] = pd.to_numeric(df["패"], errors="coerce").fillna(0)
-
-    df = df[df["유형"].isin(["일반","핸디1"])]
-
+    df = df.fillna("")
     CURRENT_DF = df
     save_data(df)
+    return {"rows": len(df)}
 
-    target = df[df["결과"]=="경기전"]
+# ================= UTIL =================
+
+def bar(p):
+    filled = int(p/5)
+    return "█"*filled + "-"*(20-filled)
+
+def dist_calc(df):
+    total = len(df)
+    if total == 0:
+        return {"총":0,"승":"-","무":"-","패":"-","wp":0,"dp":0,"lp":0}
+
+    result_col = df.iloc[:,13]
+    win = (result_col=="승").sum()
+    draw = (result_col=="무").sum()
+    lose = (result_col=="패").sum()
+
+    wp = win/total*100
+    dp = draw/total*100
+    lp = lose/total*100
 
     return {
-        "total_games": int(len(df)),
-        "target_games": int(len(target))
+        "총":total,
+        "승":f"{bar(wp)} {round(wp,2)}% ({win})",
+        "무":f"{bar(dp)} {round(dp,2)}% ({draw})",
+        "패":f"{bar(lp)} {round(lp,2)}% ({lose})",
+        "wp":wp,"dp":dp,"lp":lp
     }
 
-# =====================================================
-# MATCH LIST (1페이지)
-# =====================================================
+def run_filter(df, conditions):
+    f = df.copy()
+    for col_idx, val in conditions.items():
+        f = f[f.iloc[:,col_idx]==val]
+    return f
+
+def ai_grade(score):
+    if score>=85: return "S"
+    if score>=70: return "A"
+    if score>=55: return "B"
+    return "C"
+
+# ================= MATCH LIST (PAGE1) =================
 
 @app.get("/matches")
 def matches(user:str=Depends(get_current_user)):
     df = CURRENT_DF
-    m = df[df["결과"]=="경기전"].copy()
-    m = m.sort_values(["리그","일반구분"])
+    m = df[df.iloc[:,13]=="경기전"]
     return m.to_dict("records")
 
-# =====================================================
-# 통합스캔 (2페이지)
-# =====================================================
+# ================= INTEGRATED SCAN (PAGE2,3,4) =================
 
-@app.get("/integrated-scan")
-def integrated_scan(year:int, round_no:str, match_no:int,
-                    user:str=Depends(get_current_user)):
+@app.get("/scan")
+def scan(year:int, round_no:str, match_no:int, user:str=Depends(get_current_user)):
 
     df = CURRENT_DF
 
-    row = df[(df["년도"]==year)&
-             (df["회차"]==round_no)&
-             (df["순번"]==match_no)]
+    row = df[(df.iloc[:,1]==year)&
+             (df.iloc[:,2]==round_no)&
+             (df.iloc[:,3]==match_no)]
 
     if row.empty:
         raise HTTPException(404)
 
     row = row.iloc[0]
 
-    base_conditions = {
-        "유형":row["유형"],
-        "홈원정":row["홈원정"],
-        "일반구분":row["일반구분"],
-        "정역":row["정역"],
-        "핸디구분":row["핸디구분"]
+    base_cond = {
+        14:row.iloc[14],
+        16:row.iloc[16],
+        11:row.iloc[11],
+        15:row.iloc[15],
+        12:row.iloc[12]
     }
 
-    base = run_filter(df, base_conditions)
-    base_dist = distribution(base)
+    base = run_filter(df, base_cond)
+    base_dist = dist_calc(base)
 
-    general_conditions = {
-        "유형":row["유형"],
-        "홈원정":row["홈원정"],
-        "일반구분":row["일반구분"]
-    }
+    general_all = run_filter(df,{14:row.iloc[14],16:row.iloc[16],11:row.iloc[11]})
+    general_dist = dist_calc(general_all)
 
-    general_all = run_filter(df, general_conditions)
-    general_dist = distribution(general_all)
+    team_home = run_filter(df,{6:row.iloc[6]})
+    team_home_dist = dist_calc(team_home)
 
-    league_conditions = {"리그":row["리그"]}
-    league_all = run_filter(df, league_conditions)
-    league_dist = distribution(league_all)
+    team_away = run_filter(df,{7:row.iloc[7]})
+    team_away_dist = dist_calc(team_away)
+
+    odds_win = run_filter(df,{8:row.iloc[8]})
+    odds_win_dist = dist_calc(odds_win)
+
+    ev = base_dist["wp"]/100 * float(row.iloc[8]) - 1
+    grade = ai_grade(max(base_dist["wp"],base_dist["dp"],base_dist["lp"]))
 
     return {
-        "조건":base_conditions,
-        "기본조건분포":base_dist,
-        "일반동일값":general_dist,
-        "리그전체":league_dist
+        "기본조건":base_dist,
+        "일반전체":general_dist,
+        "홈팀":team_home_dist,
+        "원정팀":team_away_dist,
+        "배당승":odds_win_dist,
+        "EV":round(ev,3),
+        "AI":grade
     }
 
-# =====================================================
-# UI
-# =====================================================
+# ================= UI =================
 
 @app.get("/", response_class=HTMLResponse)
 def home():
     return """
 <html>
-<head>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<style>
-body{background:#111;color:white;font-family:Arial;padding:15px;}
-.card{background:#1c1c1c;padding:12px;margin-bottom:12px;border-radius:10px;}
-.row{display:flex;justify-content:space-between;}
-.btn{background:#00ffcc;color:black;border:none;padding:6px 8px;border-radius:6px;}
-.detail{display:none;background:#222;padding:10px;margin-top:10px;border-radius:8px;}
-</style>
-</head>
-<body>
-
-<h2>⚽ SecretCore 통합설계</h2>
-<button onclick="load()">경기목록</button>
-<div id="list"></div>
+<body style='background:#111;color:white;font-family:Arial;padding:15px'>
+<h2>⚽ SecretCore PRO</h2>
+<button onclick='load()'>경기목록</button>
+<div id='list'></div>
 
 <script>
 let token;
@@ -267,44 +193,21 @@ async function load(){
     let data=await r.json();
     let html="";
     data.forEach((m,i)=>{
-        html+=`
-        <div class="card">
-            <div class="row">
-                <div>
-                ${m.리그} | <b>${m.홈팀}</b> vs <b>${m.원정팀}</b><br>
-                ${m.유형}.${m.홈원정}.${m.일반구분}.${m.정역}.${m.핸디구분}
-                </div>
-                <button class="btn" onclick="scan(${m.년도},'${m.회차}',${m.순번},${i})">정보</button>
-            </div>
-            <div class="detail" id="detail_${i}"></div>
+        html+=`<div style='margin-bottom:10px'>
+        ${m[5]} | <b>${m[6]}</b> vs <b>${m[7]}</b>
+        <button onclick="scan(${m[1]},'${m[2]}',${m[3]})">정보</button>
         </div>`;
     });
     document.getElementById("list").innerHTML=html;
 }
 
-async function scan(y,r,m,i){
-    let res=await fetch(`/integrated-scan?year=${y}&round_no=${r}&match_no=${m}`,
+async function scan(y,r,m){
+    let res=await fetch(`/scan?year=${y}&round_no=${r}&match_no=${m}`,
     {headers:{"Authorization":"Bearer "+token}});
     let d=await res.json();
-    let box=document.getElementById("detail_"+i);
-    box.innerHTML=`
-    <b>기본조건</b><br>
-    승:${d.기본조건분포.승}<br>
-    무:${d.기본조건분포.무}<br>
-    패:${d.기본조건분포.패}<br><br>
-    <b>일반 동일값</b><br>
-    승:${d.일반동일값.승}<br>
-    무:${d.일반동일값.무}<br>
-    패:${d.일반동일값.패}<br><br>
-    <b>리그 전체</b><br>
-    승:${d.리그전체.승}<br>
-    무:${d.리그전체.무}<br>
-    패:${d.리그전체.패}
-    `;
-    box.style.display="block";
+    alert("AI:"+d.AI+" EV:"+d.EV);
 }
 </script>
-
 </body>
 </html>
 """
