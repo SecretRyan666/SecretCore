@@ -119,7 +119,7 @@ def upload_data(file: UploadFile = File(...)):
 @app.get("/matches")
 def matches():
     df = CURRENT_DF
-    m = df[df.iloc[:, COL_RESULT] == "경기전"]
+    m = df[df.iloc[:, COL_RESULT] == "경기전 "]
     return m.to_dict("records")
 
 # =====================================================
