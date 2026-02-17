@@ -6,7 +6,7 @@ from io import BytesIO
 app = FastAPI()
 
 # =====================================================
-# 절대참조 컬럼 인덱스 (A~Q 고정)
+# 절대참조 컬럼 인덱스 (A~Q)
 # =====================================================
 
 COL_NO        = 0
@@ -38,29 +38,16 @@ def run_filter(df, conditions: dict):
     for col_idx, val in conditions.items():
         if val is None:
             continue
-        if isinstance(val, list):
-            filtered = filtered[filtered.iloc[:, col_idx].isin(val)]
-        else:
-            filtered = filtered[filtered.iloc[:, col_idx] == val]
+        filtered = filtered[filtered.iloc[:, col_idx] == val]
     return filtered
-
-
-def bar(p):
-    filled = int(p / 5)
-    return "█" * filled + "-" * (20 - filled)
 
 
 def distribution(df):
     total = len(df)
     if total == 0:
-        return {
-            "총":0,"승":0,"무":0,"패":0,
-            "wp":0,"dp":0,"lp":0,
-            "승막대":"-","무막대":"-","패막대":"-"
-        }
+        return {"총":0,"승":0,"무":0,"패":0,"wp":0,"dp":0,"lp":0}
 
     result_col = df.iloc[:, COL_RESULT]
-
     win  = (result_col == "승").sum()
     draw = (result_col == "무").sum()
     lose = (result_col == "패").sum()
@@ -74,10 +61,7 @@ def distribution(df):
         "승":int(win),
         "무":int(draw),
         "패":int(lose),
-        "wp":wp,"dp":dp,"lp":lp,
-        "승막대":bar(wp),
-        "무막대":bar(dp),
-        "패막대":bar(lp)
+        "wp":wp,"dp":dp,"lp":lp
     }
 
 
@@ -90,17 +74,14 @@ def ev_ai(dist, row):
     ev_d = dist["dp"]/100*draw_odds - 1
     ev_l = dist["lp"]/100*lose_odds - 1
 
-    ev_map = {"승":ev_w,"무":ev_d,"패":ev_l}
-    best = max(ev_map, key=ev_map.get)
+    best = max({"승":ev_w,"무":ev_d,"패":ev_l},
+               key=lambda x: {"승":ev_w,"무":ev_d,"패":ev_l}[x])
 
     score = max(dist["wp"],dist["dp"],dist["lp"])
     grade = "S" if score>=60 else "A" if score>=50 else "B"
 
-    return {
-        "EV":{k:round(v,3) for k,v in ev_map.items()},
-        "추천":best,
-        "AI":grade
-    }
+    return {"추천":best,"AI":grade}
+
 
 # =====================================================
 # 업로드
@@ -112,28 +93,27 @@ def upload(file: UploadFile = File(...)):
     raw = file.file.read()
     df = pd.read_csv(BytesIO(raw), low_memory=False)
 
-    df.iloc[:, COL_WIN_ODDS]  = pd.to_numeric(df.iloc[:, COL_WIN_ODDS], errors="coerce").fillna(0)
-    df.iloc[:, COL_DRAW_ODDS] = pd.to_numeric(df.iloc[:, COL_DRAW_ODDS], errors="coerce").fillna(0)
-    df.iloc[:, COL_LOSE_ODDS] = pd.to_numeric(df.iloc[:, COL_LOSE_ODDS], errors="coerce").fillna(0)
+    df.iloc[:, COL_WIN_ODDS]  = pd.to_numeric(df.iloc[:, COL_WIN_ODDS], errors="coerce").fillna(0).round(2)
+    df.iloc[:, COL_DRAW_ODDS] = pd.to_numeric(df.iloc[:, COL_DRAW_ODDS], errors="coerce").fillna(0).round(2)
+    df.iloc[:, COL_LOSE_ODDS] = pd.to_numeric(df.iloc[:, COL_LOSE_ODDS], errors="coerce").fillna(0).round(2)
 
     CURRENT_DF = df
     return {"rows":len(df)}
 
+
 # =====================================================
-# 페이지1 - 경기목록
+# 페이지1 - 경기목록 (경기전 + 일반/핸디1만)
 # =====================================================
 
 @app.get("/matches")
 def matches():
-
     df = CURRENT_DF
-
-    base = df[
+    m = df[
         (df.iloc[:, COL_RESULT] == "경기전") &
-        (df.iloc[:, COL_TYPE].isin(["일반","핸디1"]))
+        ((df.iloc[:, COL_TYPE] == "일반") | (df.iloc[:, COL_TYPE] == "핸디1"))
     ]
+    return m.values.tolist()
 
-    return base.values.tolist()
 
 # =====================================================
 # 페이지2 - 통합스캔
@@ -143,10 +123,8 @@ def matches():
 def page2(year:int, match:int):
 
     df = CURRENT_DF
-    row = df[
-        (df.iloc[:,COL_YEAR]==year) &
-        (df.iloc[:,COL_MATCH]==match)
-    ].iloc[0]
+    row = df[(df.iloc[:,COL_YEAR]==year) &
+             (df.iloc[:,COL_MATCH]==match)].iloc[0]
 
     base_cond = {
         COL_TYPE:row.iloc[COL_TYPE],
@@ -158,66 +136,19 @@ def page2(year:int, match:int):
 
     base_df = run_filter(df, base_cond)
     base_dist = distribution(base_df)
-
-    general_all = run_filter(df,{
-        COL_GENERAL:row.iloc[COL_GENERAL]
-    })
-
-    general_match = run_filter(base_df,{
-        COL_GENERAL:row.iloc[COL_GENERAL]
-    })
-
-    league_all = run_filter(df,{
-        COL_LEAGUE:row.iloc[COL_LEAGUE]
-    })
-
-    league_match = run_filter(base_df,{
-        COL_LEAGUE:row.iloc[COL_LEAGUE]
-    })
-
     ev_data = ev_ai(base_dist,row)
 
     return {
+        "리그":row.iloc[COL_LEAGUE],
+        "홈":row.iloc[COL_HOME],
+        "원정":row.iloc[COL_AWAY],
+        "승배당":format(row.iloc[COL_WIN_ODDS],".2f"),
+        "무배당":format(row.iloc[COL_DRAW_ODDS],".2f"),
+        "패배당":format(row.iloc[COL_LOSE_ODDS],".2f"),
         "기본":base_dist,
-        "일반전체":distribution(general_all),
-        "일반매칭":distribution(general_match),
-        "리그전체":distribution(league_all),
-        "리그매칭":distribution(league_match),
         "EV":ev_data
     }
 
-# =====================================================
-# 페이지3 - 팀스캔
-# =====================================================
-
-@app.get("/page3")
-def page3(team:str):
-
-    df = CURRENT_DF
-
-    team_df = df[
-        (df.iloc[:,COL_HOME]==team) |
-        (df.iloc[:,COL_AWAY]==team)
-    ]
-
-    return distribution(team_df)
-
-# =====================================================
-# 페이지4 - 배당스캔
-# =====================================================
-
-@app.get("/page4")
-def page4(win:float, draw:float, lose:float):
-
-    df = CURRENT_DF
-
-    odds_df = df[
-        (df.iloc[:,COL_WIN_ODDS]==win) &
-        (df.iloc[:,COL_DRAW_ODDS]==draw) &
-        (df.iloc[:,COL_LOSE_ODDS]==lose)
-    ]
-
-    return distribution(odds_df)
 
 # =====================================================
 # UI
@@ -228,18 +159,42 @@ def home():
     return """
 <html>
 <head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
-body{background:#0e1117;color:white;font-family:Arial;margin:0;padding:20px}
-.card{background:#161b22;margin-bottom:20px;padding:20px;border-radius:14px}
-.toggle{color:#00f5ff;cursor:pointer;font-weight:bold}
-.hidden{display:none}
-.bar{font-family:monospace}
+body{background:#0f1720;color:white;font-family:Arial;margin:0;padding:20px}
+h1{font-size:28px}
+.card{
+  background:#1e293b;
+  padding:20px;
+  margin-bottom:20px;
+  border-radius:16px;
+}
+.info-btn{
+  float:right;
+  background:#22d3ee;
+  color:black;
+  border:none;
+  padding:8px 14px;
+  border-radius:10px;
+  font-weight:bold;
+}
+.bar{
+  height:14px;
+  background:#334155;
+  border-radius:10px;
+  margin-bottom:10px;
+  overflow:hidden;
+}
+.bar-inner{
+  height:100%;
+  background:#22c55e;
+}
 </style>
 </head>
 <body>
 
 <h1>SecretCore PRO</h1>
-<button onclick="load()">경기목록</button>
+<button onclick="load()">경기목록 불러오기</button>
 <div id="list"></div>
 
 <script>
@@ -248,49 +203,79 @@ async function load(){
     let r=await fetch('/matches');
     let d=await r.json();
     let html="";
-    d.forEach((m,i)=>{
+    d.forEach((m)=>{
         html+=`
         <div class="card">
-        <div style="display:flex;justify-content:space-between">
-            <div>
-                <b>${m[5]}</b><br>
-                <b>${m[6]}</b> vs <b>${m[7]}</b><br>
-                ${m[14]}.${m[16]}.${m[11]}.${m[15]}.${m[12]}<br>
-                승:${m[8]} 무:${m[9]} 패:${m[10]}
-            </div>
-            <div>
-                <span class="toggle" onclick="p2(${m[1]},${m[3]},${i})">정보</span>
-            </div>
-        </div>
-        <div id="d${i}" class="hidden"></div>
+            <b>${m[5]}</b><br>
+            <b>${m[6]}</b> vs <b>${m[7]}</b>
+            <button class="info-btn"
+              onclick="location.href='/detail?year=${m[1]}&match=${m[3]}'">
+              정보
+            </button>
+            <br><br>
+            ${m[14]} · ${m[16]} · ${m[11]} · ${m[15]} · ${m[12]}<br>
+            배당: 승 ${Number(m[8]).toFixed(2)} |
+                  무 ${Number(m[9]).toFixed(2)} |
+                  패 ${Number(m[10]).toFixed(2)}
         </div>`;
     });
     document.getElementById("list").innerHTML=html;
 }
 
-async function p2(y,m,i){
-    let r=await fetch(`/page2?year=${y}&match=${m}`);
-    let d=await r.json();
-    let box=document.getElementById("d"+i);
-    box.innerHTML=`
-    <div class="bar">
-    <b>기본조건</b><br>
-    승 ${d.기본.승막대} ${d.기본.wp}% (${d.기본.승})<br>
-    무 ${d.기본.무막대} ${d.기본.dp}% (${d.기본.무})<br>
-    패 ${d.기본.패막대} ${d.기본.lp}% (${d.기본.패})<br><br>
-
-    <b>일반전체</b> 승:${d.일반전체.승} 무:${d.일반전체.무} 패:${d.일반전체.패}<br>
-    <b>일반매칭</b> 승:${d.일반매칭.승} 무:${d.일반매칭.무} 패:${d.일반매칭.패}<br>
-    <b>리그전체</b> 승:${d.리그전체.승} 무:${d.리그전체.무} 패:${d.리그전체.패}<br>
-    <b>리그매칭</b> 승:${d.리그매칭.승} 무:${d.리그매칭.무} 패:${d.리그매칭.패}<br><br>
-
-    추천:${d.EV.추천} | AI:${d.EV.AI}
-    </div>
-    `;
-    box.classList.toggle("hidden");
-}
-
 </script>
+
+</body>
+</html>
+"""
+
+
+# =====================================================
+# 페이지2 화면
+# =====================================================
+
+@app.get("/detail", response_class=HTMLResponse)
+def detail(year:int, match:int):
+
+    data = page2(year,match)
+    dist = data["기본"]
+
+    return f"""
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+body{{background:#0f1720;color:white;font-family:Arial;padding:20px}}
+.card{{background:#1e293b;padding:20px;border-radius:16px}}
+.bar{{height:14px;background:#334155;border-radius:10px;margin-bottom:10px}}
+.bar-inner{{height:100%;background:#22c55e}}
+</style>
+</head>
+<body>
+
+<button onclick="location.href='/'">← 경기목록</button>
+
+<div class="card">
+<b>{data["리그"]}</b><br>
+<b>{data["홈"]} vs {data["원정"]}</b><br>
+배당: 승 {data["승배당"]} |
+      무 {data["무배당"]} |
+      패 {data["패배당"]}
+
+<br><br>
+총 {dist["총"]}경기<br>
+
+승 {dist["wp"]}% ({dist["승"]})
+<div class="bar"><div class="bar-inner" style="width:{dist["wp"]}%"></div></div>
+
+무 {dist["dp"]}% ({dist["무"]})
+<div class="bar"><div class="bar-inner" style="width:{dist["dp"]}%"></div></div>
+
+패 {dist["lp"]}% ({dist["패"]})
+<div class="bar"><div class="bar-inner" style="width:{dist["lp"]}%"></div></div>
+
+<br>
+추천: {data["EV"]["추천"]} | AI: {data["EV"]["AI"]}
+</div>
 
 </body>
 </html>
