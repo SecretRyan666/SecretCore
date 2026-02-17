@@ -158,8 +158,14 @@ def upload_data(file: UploadFile = File(...)):
 @app.get("/matches")
 def matches():
     df = CURRENT_DF
+
+    # 결과 열이 몇 번째인지 (A=0 기준)
+    COL_RESULT = 13   # 결과
+
     m = df[df.iloc[:, COL_RESULT] == "경기전"]
-    return m.to_dict("records")
+
+    # 🔥 컬럼명 제거 → 값 배열로 반환
+    return m.values.tolist()
 
 # =====================================================
 # 페이지2 기본정보
@@ -239,18 +245,18 @@ async function load(){
         <div class="card">
         <b>${m[6]}</b> vs <b>${m[7]}</b><br>
         ${m[14]}.${m[16]}.${m[11]}.${m[15]}.${m[12]}<br>
-        <span class="toggle" onclick="p2(${m[1]},${m[3]},${i})">정보</span> |
+        <span class="toggle" onclick="p2(${m[1]},'${m[2]}',${m[3]},${i})">정보</span> |
         <span class="toggle" onclick="p3('${m[6]}')">${m[6]}</span> |
         <span class="toggle" onclick="p3('${m[7]}')">${m[7]}</span> |
-        <span class="toggle" onclick="p4(${m[8]},${m[9]},${m[10]})">승무패</span>
+        <span class="toggle" onclick="p4('${m[8]}','${m[9]}','${m[10]}')">승무패</span>
         <div id="d${i}" class="hidden"></div>
         </div>`;
     });
     document.getElementById("list").innerHTML=html;
 }
 
-async function p2(y,m,i){
-    let r=await fetch(`/page2?year=${y}&match=${m}`);
+async function p2(y,rn,m,i){
+    let r=await fetch(`/page2?year=${y}&round=${rn}&match=${m}`);
     let d=await r.json();
     let box=document.getElementById("d"+i);
     box.innerHTML=`${d.승}<br>${d.무}<br>${d.패}`;
@@ -260,16 +266,13 @@ async function p2(y,m,i){
 async function p3(t){
     let r=await fetch(`/page3?team=${t}`);
     let d=await r.json();
-    alert("팀분포\\n"+d.승+"\\n"+d.무+"\\n"+d.패);
+    alert("팀분포\n"+d.승+"\n"+d.무+"\n"+d.패);
 }
 
 async function p4(w,d,l){
     let r=await fetch(`/page4?win=${w}&draw=${d}&lose=${l}`);
     let x=await r.json();
-    alert("배당분포\\n"+x.승+"\\n"+x.무+"\\n"+x.패);
+    alert("배당분포\n"+x.승+"\n"+x.무+"\n"+x.패);
 }
 
 </script>
-</body>
-</html>
-"""
