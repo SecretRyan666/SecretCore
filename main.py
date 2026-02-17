@@ -87,6 +87,12 @@ def ev_ai(dist, row):
         "AI":grade
     }
 
+
+def text_bar(p):
+    blocks = int(round(p / 5))  # 20칸
+    return "█"*blocks + "░"*(20-blocks)
+
+
 # =====================================================
 # 업로드
 # =====================================================
@@ -104,21 +110,38 @@ def upload(file: UploadFile = File(...)):
     CURRENT_DF = df
     return {"rows":len(df)}
 
+
 # =====================================================
-# 페이지1 - 경기목록
+# Page1 - 경기목록
 # =====================================================
 
 @app.get("/matches")
-def matches():
+def matches(filter_type:str=None, filter_homeaway:str=None,
+            filter_general:str=None, filter_dir:str=None,
+            filter_handi:str=None):
+
     df = CURRENT_DF
+
     m = df[
         (df.iloc[:, COL_RESULT] == "경기전") &
         ((df.iloc[:, COL_TYPE] == "일반") | (df.iloc[:, COL_TYPE] == "핸디1"))
     ]
+
+    if filter_type:
+        m = m[m.iloc[:, COL_TYPE] == filter_type]
+    if filter_homeaway:
+        m = m[m.iloc[:, COL_HOMEAWAY] == filter_homeaway]
+    if filter_general:
+        m = m[m.iloc[:, COL_GENERAL] == filter_general]
+    if filter_dir:
+        m = m[m.iloc[:, COL_DIR] == filter_dir]
+    if filter_handi:
+        m = m[m.iloc[:, COL_HANDI] == filter_handi]
+
     return m.values.tolist()
 
 # =====================================================
-# 페이지2 - 통합스캔
+# Page2 - 통합스캔
 # =====================================================
 
 @app.get("/page2")
@@ -139,40 +162,86 @@ def page2(year:int, match:int):
     base_df = run_filter(df, base_cond)
     base_dist = distribution(base_df)
 
+    # 일반전체
+    general_all = run_filter(df,{COL_GENERAL:row.iloc[COL_GENERAL]})
+    general_all_dist = distribution(general_all)
+
+    # 리그전체
+    league_all = run_filter(df,{COL_LEAGUE:row.iloc[COL_LEAGUE]})
+    league_all_dist = distribution(league_all)
+
     ev_data = ev_ai(base_dist,row)
 
     return {
         "리그":row.iloc[COL_LEAGUE],
         "홈":row.iloc[COL_HOME],
         "원정":row.iloc[COL_AWAY],
+        "유형":row.iloc[COL_TYPE],
+        "홈원정":row.iloc[COL_HOMEAWAY],
+        "일반":row.iloc[COL_GENERAL],
+        "정역":row.iloc[COL_DIR],
+        "핸디":row.iloc[COL_HANDI],
         "승배당":format(row.iloc[COL_WIN_ODDS],".2f"),
         "무배당":format(row.iloc[COL_DRAW_ODDS],".2f"),
         "패배당":format(row.iloc[COL_LOSE_ODDS],".2f"),
         "기본":base_dist,
+        "일반전체":general_all_dist,
+        "리그전체":league_all_dist,
         "EV":ev_data
     }
 
+
 # =====================================================
-# 페이지3 - 팀스캔
+# Page3 - 팀스캔
 # =====================================================
 
 @app.get("/page3")
 def page3(team:str):
+
     df = CURRENT_DF
-    team_df = df[(df.iloc[:,COL_HOME]==team) | (df.iloc[:,COL_AWAY]==team)]
-    return distribution(team_df)
+
+    team_df = df[(df.iloc[:,COL_HOME]==team) |
+                 (df.iloc[:,COL_AWAY]==team)]
+
+    overall = distribution(team_df)
+
+    home_df = team_df[team_df.iloc[:,COL_HOME]==team]
+    away_df = team_df[team_df.iloc[:,COL_AWAY]==team]
+
+    home_dist = distribution(home_df)
+    away_dist = distribution(away_df)
+
+    return {
+        "팀":team,
+        "전체":overall,
+        "홈":home_dist,
+        "원정":away_dist
+    }
+
 
 # =====================================================
-# 페이지4 - 배당스캔
+# Page4 - 배당스캔
 # =====================================================
 
 @app.get("/page4")
 def page4(win:float, draw:float, lose:float):
+
     df = CURRENT_DF
-    odds_df = df[(df.iloc[:,COL_WIN_ODDS]==win) &
-                 (df.iloc[:,COL_DRAW_ODDS]==draw) &
-                 (df.iloc[:,COL_LOSE_ODDS]==lose)]
-    return distribution(odds_df)
+
+    odds_df = df[
+        (df.iloc[:,COL_WIN_ODDS]==win) &
+        (df.iloc[:,COL_DRAW_ODDS]==draw) &
+        (df.iloc[:,COL_LOSE_ODDS]==lose)
+    ]
+
+    overall = distribution(odds_df)
+
+    return {
+        "승":win,
+        "무":draw,
+        "패":lose,
+        "분포":overall
+    }
 
 # =====================================================
 # UI
@@ -185,62 +254,117 @@ def home():
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
-body{background:#0f1720;color:white;font-family:Arial;margin:0;padding:40px;font-size:20px}
+body{
+  background:#0f1720;
+  color:white;
+  font-family:Arial;
+  margin:0;
+  padding:40px;
+  font-size:18px
+}
+h1{margin-bottom:30px}
+
 .card{
-  background:#1e293b;
-  padding:30px;
-  margin-bottom:30px;
+  background:rgba(30,41,59,0.8);
+  backdrop-filter:blur(8px);
+  padding:25px;
+  margin-bottom:25px;
   border-radius:20px;
 }
-.info-btn{
-  float:right;
+
+button{
   background:#22d3ee;
   color:black;
   border:none;
-  padding:12px 20px;
-  border-radius:14px;
-  font-size:18px;
+  padding:8px 14px;
+  border-radius:12px;
+  font-size:14px;
+  font-weight:bold;
+  margin-right:6px;
+  margin-bottom:10px;
+}
+
+.team-btn{
+  background:#334155;
+  color:white;
+}
+
+.badge{
+  display:inline-block;
+  padding:6px 10px;
+  border-radius:12px;
+  font-size:14px;
   font-weight:bold;
 }
-.bar{
-  height:18px;
-  background:#334155;
-  border-radius:10px;
-  margin-bottom:12px;
-  overflow:hidden;
-}
-.bar-inner{
-  height:100%;
-  background:#22c55e;
+
+.win{color:#22c55e}
+.draw{color:#cbd5e1}
+.lose{color:#ef4444}
+
+pre{
+  background:#0b1220;
+  padding:15px;
+  border-radius:14px;
+  font-size:15px;
 }
 </style>
 </head>
 <body>
 
 <h1>SecretCore PRO</h1>
-<button onclick="load()">경기목록 불러오기</button>
+
+<div>
+<button onclick="load()">경기목록</button>
+<button onclick="filterType('일반')">유형 일반</button>
+<button onclick="filterType('핸디1')">유형 핸디1</button>
+</div>
+
 <div id="list"></div>
 
 <script>
 
+window.onload = load;
+
 async function load(){
     let r=await fetch('/matches');
     let d=await r.json();
+    renderList(d);
+}
+
+async function filterType(t){
+    let r=await fetch('/matches?filter_type='+t);
+    let d=await r.json();
+    renderList(d);
+}
+
+function renderList(d){
     let html="";
     d.forEach((m)=>{
         html+=`
         <div class="card">
             <b>${m[5]}</b><br>
-            <b>${m[6]}</b> vs <b>${m[7]}</b>
-            <button class="info-btn"
+            <b class="team-btn"
+               onclick="location.href='/page3?team=${m[6]}'">${m[6]}</b>
+             vs
+            <b class="team-btn"
+               onclick="location.href='/page3?team=${m[7]}'">${m[7]}</b>
+
+            <button style="float:right"
               onclick="location.href='/detail?year=${m[1]}&match=${m[3]}'">
               정보
             </button>
+
             <br><br>
             ${m[14]} · ${m[16]} · ${m[11]} · ${m[15]} · ${m[12]}<br>
-            배당: 승 ${Number(m[8]).toFixed(2)} |
-                  무 ${Number(m[9]).toFixed(2)} |
-                  패 ${Number(m[10]).toFixed(2)}
+            승 <span class="win"
+               onclick="location.href='/page4?win=${m[8]}&draw=${m[9]}&lose=${m[10]}'">
+               ${Number(m[8]).toFixed(2)}</span> |
+            무 <span class="draw"
+               onclick="location.href='/page4?win=${m[8]}&draw=${m[9]}&lose=${m[10]}'">
+               ${Number(m[9]).toFixed(2)}</span> |
+            패 <span class="lose"
+               onclick="location.href='/page4?win=${m[8]}&draw=${m[9]}&lose=${m[10]}'">
+               ${Number(m[10]).toFixed(2)}</span>
         </div>`;
     });
     document.getElementById("list").innerHTML=html;
@@ -252,21 +376,36 @@ async function load(){
 </html>
 """
 
+
+# =====================================================
+# 상세 페이지
+# =====================================================
+
 @app.get("/detail", response_class=HTMLResponse)
 def detail(year:int, match:int):
 
     data = page2(year,match)
-    dist = data["기본"]
+
+    def block(title,dist):
+        return f"""
+        <h3>{title} 기준 총 {dist["총"]}경기</h3>
+        <pre>
+승 {text_bar(dist["wp"])} {dist["wp"]}% ({dist["승"]})
+무 {text_bar(dist["dp"])} {dist["dp"]}% ({dist["무"]})
+패 {text_bar(dist["lp"])} {dist["lp"]}% ({dist["패"]})
+        </pre>
+        """
 
     return f"""
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
-body{{background:#0f1720;color:white;font-family:Arial;padding:40px;font-size:20px}}
-.card{{background:#1e293b;padding:30px;border-radius:20px}}
-.bar{{height:18px;background:#334155;border-radius:10px;margin-bottom:12px}}
-.bar-inner{{height:100%;background:#22c55e}}
+body{{background:#0f1720;color:white;font-family:Arial;padding:40px}}
+.card{{background:rgba(30,41,59,0.8);padding:30px;border-radius:20px}}
+button{{background:#22d3ee;color:black;border:none;
+padding:8px 14px;border-radius:12px;font-weight:bold}}
+pre{{background:#0b1220;padding:15px;border-radius:14px}}
 </style>
 </head>
 <body>
@@ -275,25 +414,23 @@ body{{background:#0f1720;color:white;font-family:Arial;padding:40px;font-size:20
 
 <div class="card">
 <b>{data["리그"]}</b><br>
-<b>{data["홈"]} vs {data["원정"]}</b><br>
-배당: 승 {data["승배당"]} |
-      무 {data["무배당"]} |
-      패 {data["패배당"]}
+<b>{data["홈"]}</b> vs <b>{data["원정"]}</b><br>
+유형 {data["유형"]} · {data["홈원정"]} · {data["일반"]} · {data["정역"]} · {data["핸디"]}<br>
+배당: 승 {data["승배당"]} | 무 {data["무배당"]} | 패 {data["패배당"]}
 
-<br><br>
-총 {dist["총"]}경기<br>
-
-승 {dist["wp"]}% ({dist["승"]})
-<div class="bar"><div class="bar-inner" style="width:{dist["wp"]}%"></div></div>
-
-무 {dist["dp"]}% ({dist["무"]})
-<div class="bar"><div class="bar-inner" style="width:{dist["dp"]}%"></div></div>
-
-패 {dist["lp"]}% ({dist["패"]})
-<div class="bar"><div class="bar-inner" style="width:{dist["lp"]}%"></div></div>
+{block("기본조건",data["기본"])}
+{block("일반전체",data["일반전체"])}
+{block("리그전체",data["리그전체"])}
 
 <br>
-추천: {data["EV"]["추천"]} | AI: {data["EV"]["AI"]}
+추천: {data["EV"]["추천"]} |
+AI: {data["EV"]["AI"]}
+
+<br><br>
+<button onclick="location.href='/page3?team={data["홈"]}'">홈팀분석</button>
+<button onclick="location.href='/page3?team={data["원정"]}'">원정팀분석</button>
+<button onclick="location.href='/page4?win={data["승배당"]}&draw={data["무배당"]}&lose={data["패배당"]}'">배당분석</button>
+
 </div>
 
 </body>
