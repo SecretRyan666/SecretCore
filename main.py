@@ -167,32 +167,34 @@ def home():
 
     if LOGGED_IN:
         login_area = """
-        <div class="top-actions">
-            <form action="/upload-data" method="post" enctype="multipart/form-data">
+        <div class="top-card">
+            <form action="/upload-data" method="post" enctype="multipart/form-data" class="upload-form">
                 <input type="file" name="file" required>
-                <button type="submit" class="btn-primary">업로드</button>
+                <button type="submit" class="btn-primary small-btn">업로드</button>
             </form>
             <a href="/logout">
-                <button class="btn-primary logout-btn">로그아웃</button>
+                <button class="btn-primary logout-btn small-btn">로그아웃</button>
             </a>
         </div>
         """
     else:
         login_area = """
-        <form action="/login" method="post" style="display:inline-flex;gap:6px;">
-            <input name="username" placeholder="ID" style="width:70px;">
-            <input name="password" type="password" placeholder="PW" style="width:70px;">
-            <button type="submit" class="btn-primary">로그인</button>
-        </form>
+        <div class="top-card">
+            <form action="/login" method="post" class="login-form">
+                <input name="username" placeholder="ID">
+                <input name="password" type="password" placeholder="PW">
+                <button type="submit" class="btn-primary small-btn">로그인</button>
+            </form>
+        </div>
         """
 
-    return """
+    return f"""
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
 
-body{
+body{{
 background:
 radial-gradient(circle at 20% 20%,#1e293b,transparent 40%),
 radial-gradient(circle at 80% 80%,#0f1720,transparent 40%),
@@ -200,66 +202,64 @@ radial-gradient(circle at 80% 80%,#0f1720,transparent 40%),
 color:white;
 font-family:Arial;
 padding:15px;
-}
+}}
 
-.top-wrapper{
-display:flex;
-flex-direction:column;
-align-items:center;
-gap:12px;
-margin-bottom:20px;
-}
-
-.logo-area{
+.title-box{{
 text-align:center;
-}
+margin-bottom:15px;
+}}
 
-.logo-area h2{
+.title-box h1{{
 margin:0;
-font-size:26px;
-}
+font-size:24px;
+letter-spacing:1px;
+}}
 
-.action-area{
-width:100%;
-display:flex;
-justify-content:flex-end;
-}
-
-.top-actions{
+.top-card{{
+background:rgba(30,41,59,0.9);
+padding:15px;
+border-radius:16px;
+margin-bottom:15px;
 display:flex;
 flex-direction:column;
-align-items:flex-end;
-gap:8px;
-}
-
-.top-actions form{
-display:flex;
-gap:6px;
 align-items:center;
-}
+gap:10px;
+box-shadow:0 6px 25px rgba(0,0,0,0.4);
+}}
 
-.logout-btn{
-background:linear-gradient(135deg,#38bdf8,#2563eb);
-}
+.upload-form,
+.login-form{{
+display:flex;
+gap:8px;
+flex-wrap:wrap;
+justify-content:center;
+}}
 
-.filters{
+.login-form input,
+.upload-form input[type="file"]{{
+padding:6px 8px;
+border-radius:8px;
+border:none;
+}}
+
+.filters{{
 display:flex;
 gap:8px;
 flex-wrap:nowrap;
 overflow-x:auto;
 margin-bottom:15px;
-}
+}}
 
-select{
+select{{
 border:none;
 border-radius:8px;
 padding:6px 10px;
 font-size:13px;
 background:#1e293b;
 color:white;
-}
+}}
 
-.btn-primary{
+.btn-primary{{
 height:32px;
 padding:0 14px;
 border-radius:10px;
@@ -268,9 +268,25 @@ color:#0f1720;
 font-weight:600;
 border:none;
 font-size:13px;
-}
+}}
 
-.card{
+.small-btn{{
+height:30px;
+font-size:12px;
+padding:0 10px;
+}}
+
+.logout-btn{{
+background:linear-gradient(135deg,#38bdf8,#2563eb);
+}}
+
+.list-btn{{
+height:30px;
+font-size:12px;
+padding:0 10px;
+}}
+
+.card{{
 background:rgba(30,41,59,0.9);
 backdrop-filter:blur(10px);
 padding:18px;
@@ -279,14 +295,14 @@ margin-bottom:16px;
 box-shadow:0 8px 30px rgba(0,0,0,0.4);
 position:relative;
 transition:0.2s ease;
-}
+}}
 
-.card:hover{
+.card:hover{{
 transform:translateY(-3px);
 box-shadow:0 12px 35px rgba(0,0,0,0.6);
-}
+}}
 
-.info-btn{
+.info-btn{{
 position:absolute;
 right:12px;
 top:12px;
@@ -297,70 +313,41 @@ background:#e2e8f0;
 color:#0f1720;
 font-size:12px;
 border:none;
-}
+}}
 
-.league{
+.league{{
 font-weight:700;
 color:#38bdf8;
 margin-bottom:4px;
-}
+}}
 
-.match{
+.match{{
 font-size:14px;
 margin-bottom:6px;
-}
+}}
 
-.condition{
+.condition{{
 font-size:12px;
 opacity:0.8;
 margin-bottom:6px;
-}
+}}
 
-.odds{
+.odds{{
 font-size:13px;
-}
-
-.top-actions{
-display:flex;
-flex-direction:column;
-align-items:flex-end;
-gap:8px;
-}
-
-.top-actions form{
-display:flex;
-gap:6px;
-align-items:center;
-}
-
-.logout-btn{
-background:linear-gradient(135deg,#38bdf8,#2563eb);
-}
-
-.filters button{
-padding:4px 10px;
-font-size:12px;
-border-radius:8px;
-height:28px;
-}
+}}
 
 </style>
 </head>
 <body>
 
-<div class="top-wrapper">
-
-    <div class="logo-area">
-        <h2>SecretCore PRO</h2>
-    </div>
-
-    <div class="action-area">
-        """ + login_area + """
-    </div>
-
+<div class="title-box">
+    <h1>SecretCore PRO</h1>
 </div>
+
+{login_area}
+
 <div class="filters">
-<button onclick="resetFilters()" class="btn-primary">경기목록</button>
+<button onclick="resetFilters()" class="btn-primary list-btn">경기</button>
 <select id="type"></select>
 <select id="homeaway"></select>
 <select id="general"></select>
@@ -372,82 +359,82 @@ height:28px;
 
 <script>
 
-let filters = JSON.parse(localStorage.getItem("filters") || "{}");
+let filters = JSON.parse(localStorage.getItem("filters") || "{{}}");
 
-window.onload = async function(){
+window.onload = async function(){{
     await loadFilters();
     restoreSelections();
     load();
-}
+}}
 
-function saveFilters(){
+function saveFilters(){{
     localStorage.setItem("filters", JSON.stringify(filters));
-}
+}}
 
-function restoreSelections(){
-    for(let key in filters){
+function restoreSelections(){{
+    for(let key in filters){{
         let sel = document.getElementById(key.replace("filter_",""));
         if(sel) sel.value = filters[key];
-    }
-}
+    }}
+}}
 
-async function loadFilters(){
+async function loadFilters(){{
     let r = await fetch('/filters');
     let data = await r.json();
 
-    const map = {
+    const map = {{
         type:"유형",
         homeaway:"홈원정",
         general:"일반",
         dir:"정역",
         handi:"핸디"
-    };
+    }};
 
-    for(let key in map){
+    for(let key in map){{
         let select = document.getElementById(key);
         select.innerHTML = "<option value=''>" + map[key] + "</option>";
 
-        data[key].forEach(function(val){
+        data[key].forEach(function(val){{
             let opt=document.createElement("option");
             opt.value=val;
             opt.text=val;
             select.appendChild(opt);
-        });
+        }});
 
-        select.onchange=function(){
+        select.onchange=function(){{
             setFilter("filter_"+key,select.value);
-        };
-    }
-}
+        }};
+    }}
+}}
 
-function resetFilters(){
-    filters={};
+function resetFilters(){{
+    filters={{}};
     saveFilters();
-    document.querySelectorAll("select").forEach(function(s){
+    document.querySelectorAll("select").forEach(function(s){{
         s.value="";
-    });
+    }});
     load();
-}
+}}
 
-function setFilter(key,val){
+function setFilter(key,val){{
     if(val==="") delete filters[key];
     else filters[key]=val;
     saveFilters();
     load();
-}
+}}
 
-function goDetail(year, match){
+function goDetail(year, match){{
     window.location.href = "/detail?year=" + year + "&match=" + match;
-}
+}}
 
-async function load(){
+async function load(){{
     let query=new URLSearchParams(filters).toString();
     let r=await fetch('/matches?'+query);
     let data=await r.json();
 
     let html="";
 
-    data.forEach(function(m){
+    data.forEach(function(m){{
         html +=
         "<div class='card'>"+
         "<div class='league'>"+m[5]+"</div>"+
@@ -456,10 +443,10 @@ async function load(){
         "<div class='condition'>"+m[14]+" · "+m[16]+" · "+m[11]+" · "+m[15]+" · "+m[12]+"</div>"+
         "<div class='odds'>승 "+Number(m[8]).toFixed(2)+" | 무 "+Number(m[9]).toFixed(2)+" | 패 "+Number(m[10]).toFixed(2)+"</div>"+
         "</div>";
-    });
+    }});
 
     document.getElementById("list").innerHTML=html;
-}
+}}
 
 </script>
 
