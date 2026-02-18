@@ -159,32 +159,28 @@ def upload(file: UploadFile = File(...)):
 
 
 # =====================================================
-# Page1 UI (FULL REPLACEMENT v2 - 버튼 재정렬)
+# Page1 UI (HEADER STYLE REBUILD - FULL REPLACEMENT)
 # =====================================================
 
 @app.get("/", response_class=HTMLResponse)
 def home():
 
     if LOGGED_IN:
-        login_area = """
-        <div class="top-card">
-            <form action="/upload-data" method="post" enctype="multipart/form-data" class="upload-row">
-                <input type="file" name="file" required>
-                <button type="submit" class="btn-primary small-btn">업로드</button>
-                <a href="/logout">
-                    <button type="button" class="btn-primary logout-btn small-btn">로그아웃</button>
-                </a>
+        right_menu = """
+        <div class="header-actions">
+            <form action="/upload-data" method="post" enctype="multipart/form-data" class="upload-inline">
+                <label class="upload-icon">
+                    ⬆
+                    <input type="file" name="file" onchange="this.form.submit()" hidden>
+                </label>
             </form>
+            <a href="/logout" class="header-btn">로그아웃</a>
         </div>
         """
     else:
-        login_area = """
-        <div class="top-card">
-            <form action="/login" method="post" class="upload-row">
-                <input name="username" placeholder="ID">
-                <input name="password" type="password" placeholder="PW">
-                <button type="submit" class="btn-primary small-btn">로그인</button>
-            </form>
+        right_menu = """
+        <div class="header-actions">
+            <a href="/login" class="header-btn">로그인</a>
         </div>
         """
 
@@ -195,126 +191,106 @@ def home():
 <style>
 
 body{{
-background:
-radial-gradient(circle at 20% 20%,#1e293b,transparent 40%),
-radial-gradient(circle at 80% 80%,#0f1720,transparent 40%),
-#0f1720;
+margin:0;
+background:linear-gradient(135deg,#0f1720,#1e293b);
 color:white;
 font-family:Arial;
-padding:15px;
 }}
 
-.title-box{{
-text-align:center;
-margin-bottom:15px;
-}}
-
-.title-box h1{{
-margin:0;
-font-size:24px;
-}}
-
-.top-card{{
-background:rgba(30,41,59,0.9);
-padding:15px;
-border-radius:16px;
-margin-bottom:15px;
-box-shadow:0 6px 25px rgba(0,0,0,0.4);
-}}
-
-.upload-row{{
+.header-bar{{
 display:flex;
-gap:8px;
+justify-content:space-between;
 align-items:center;
-justify-content:center;
-flex-wrap:wrap;
+padding:14px 18px;
+background:#0f1720;
+border-bottom:1px solid rgba(255,255,255,0.08);
+position:sticky;
+top:0;
+z-index:100;
 }}
 
-input[type="file"],
-input[name="username"],
-input[name="password"]{{
-padding:6px 8px;
+.logo{{
+font-size:18px;
+font-weight:700;
+letter-spacing:0.5px;
+}}
+
+.header-actions{{
+display:flex;
+gap:12px;
+align-items:center;
+}}
+
+.header-btn{{
+font-size:13px;
+padding:6px 12px;
 border-radius:8px;
-border:none;
+background:linear-gradient(135deg,#22d3ee,#3b82f6);
+color:#0f1720;
+text-decoration:none;
+font-weight:600;
+}}
+
+.upload-icon{{
+font-size:16px;
+cursor:pointer;
+background:#1e293b;
+padding:6px 10px;
+border-radius:8px;
 }}
 
 .filters{{
 display:flex;
-gap:6px;
+gap:8px;
+padding:12px;
 overflow-x:auto;
-margin-bottom:15px;
-align-items:center;
+background:#111827;
 }}
 
-.btn-primary{{
-border:none;
-border-radius:10px;
+.filter-main{{
 background:linear-gradient(135deg,#22d3ee,#3b82f6);
 color:#0f1720;
-font-weight:600;
-}}
-
-.small-btn{{
-height:30px;
-font-size:12px;
-padding:0 10px;
-}}
-
-.logout-btn{{
-background:linear-gradient(135deg,#38bdf8,#2563eb);
-}}
-
-.big-btn{{
-height:40px;
-font-size:16px;
-padding:0 18px;
-}}
-
-.filter-btn{{
-height:28px;
-font-size:11px;
-padding:0 8px;
-background:#1e293b;
-color:white;
+font-weight:700;
+border:none;
+border-radius:12px;
+padding:8px 18px;
+font-size:15px;
 }}
 
 select{{
-height:28px;
-font-size:11px;
-padding:0 6px;
-border:none;
-border-radius:8px;
 background:#1e293b;
 color:white;
+border:none;
+border-radius:10px;
+padding:6px 10px;
+font-size:12px;
 }}
 
 .card{{
-background:rgba(30,41,59,0.9);
-backdrop-filter:blur(10px);
+background:rgba(30,41,59,0.95);
+margin:14px;
 padding:18px;
-border-radius:20px;
-margin-bottom:16px;
-box-shadow:0 8px 30px rgba(0,0,0,0.4);
+border-radius:18px;
+box-shadow:0 6px 25px rgba(0,0,0,0.4);
 position:relative;
 }}
 
 .info-btn{{
 position:absolute;
-right:12px;
-top:12px;
-height:26px;
-padding:0 10px;
+right:14px;
+top:14px;
+padding:4px 10px;
+font-size:12px;
 border-radius:8px;
 background:#e2e8f0;
 color:#0f1720;
-font-size:11px;
 border:none;
 }}
 
 .league{{
-font-weight:700;
 color:#38bdf8;
-margin-bottom:4px;
+font-weight:700;
+margin-bottom:6px;
 }}
 
 .match{{
@@ -336,19 +312,18 @@ font-size:13px;
 </head>
 <body>
 
-<div class="title-box">
-    <h1>SecretCore PRO</h1>
+<div class="header-bar">
+    <div class="logo">SecretCore PRO</div>
+    {right_menu}
 </div>
 
-{login_area}
-
 <div class="filters">
-<button onclick="resetFilters()" class="btn-primary big-btn">경기</button>
-<select id="type"></select>
-<select id="homeaway"></select>
-<select id="general"></select>
-<select id="dir"></select>
-<select id="handi"></select>
+    <button onclick="resetFilters()" class="filter-main">경기</button>
+    <select id="type"></select>
+    <select id="homeaway"></select>
+    <select id="general"></select>
+    <select id="dir"></select>
+    <select id="handi"></select>
 </div>
 
 <div id="list"></div>
