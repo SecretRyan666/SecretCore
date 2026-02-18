@@ -1,7 +1,6 @@
 from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
 import pandas as pd
-from io import BytesIO
 import os
 
 app = FastAPI()
@@ -40,7 +39,11 @@ LOGGED_IN = False
 def load_data():
     global CURRENT_DF
     if os.path.exists(DATA_FILE):
-        df = pd.read_csv(DATA_FILE, encoding="utf-8-sig", low_memory=False)
+        df = pd.read_csv(
+            DATA_FILE,
+            encoding="utf-8-sig",
+            low_memory=True
+        )
 
         df.iloc[:, COL_WIN_ODDS]  = pd.to_numeric(df.iloc[:, COL_WIN_ODDS], errors="coerce").fillna(0).round(2)
         df.iloc[:, COL_DRAW_ODDS] = pd.to_numeric(df.iloc[:, COL_DRAW_ODDS], errors="coerce").fillna(0).round(2)
@@ -127,15 +130,21 @@ def logout():
     return RedirectResponse("/", status_code=302)
 
 # =====================================================
-# 업로드 (🔥 Cold Start 대응 포함)
+# 🔥 업로드 (메모리 최적화 버전)
 # =====================================================
 
 @app.post("/upload-data")
 def upload(file: UploadFile = File(...)):
     global CURRENT_DF
 
-    raw = file.file.read()
-    df = pd.read_csv(BytesIO(raw), encoding="utf-8-sig", low_memory=False)
+    # 🔥 raw.read() 제거
+    # 🔥 BytesIO 제거
+    # 🔥 직접 스트림 로딩
+    df = pd.read_csv(
+        file.file,
+        encoding="utf-8-sig",
+        low_memory=True
+    )
 
     if df.shape[1] < 17:
         return {"error":"컬럼 구조 오류"}
@@ -145,6 +154,7 @@ def upload(file: UploadFile = File(...)):
     df.iloc[:, COL_LOSE_ODDS] = pd.to_numeric(df.iloc[:, COL_LOSE_ODDS], errors="coerce").fillna(0).round(2)
 
     df.to_csv(DATA_FILE, index=False, encoding="utf-8-sig")
+
     CURRENT_DF = df
 
     return RedirectResponse("/", status_code=302)
@@ -377,29 +387,6 @@ async function load(){
     document.getElementById("list").innerHTML=html;
 }
 
-/* 🔥 업로드 Cold Start 대응 */
-document.addEventListener("DOMContentLoaded", function(){
-
-    const uploadForm = document.getElementById("uploadForm");
-
-    if(uploadForm){
-        uploadForm.addEventListener("submit", async function(e){
-
-            e.preventDefault();
-
-            // 서버 깨우기
-            await fetch("/health");
-
-            // 0.5초 대기 후 업로드
-            setTimeout(()=>{
-                uploadForm.submit();
-            },500);
-
-        });
-    }
-
-});
-
 </script>
 
 </body>
@@ -497,7 +484,7 @@ def bar_html(percent, mode="win"):
 
 
 # =====================================================
-# Page2 - 대시보드 상세
+# Page2 - 상세 대시보드
 # =====================================================
 
 @app.get("/detail", response_class=HTMLResponse)
@@ -687,8 +674,10 @@ def page3(team:str, league:str=None):
         (df.iloc[:, COL_AWAY]==team)
     ]
 
-    league_all_dist = distribution(team_df)
+    # 모든 리그
+    all_dist = distribution(team_df)
 
+    # 특정 리그
     if league:
         league_df = team_df[team_df.iloc[:, COL_LEAGUE]==league]
     else:
@@ -696,13 +685,14 @@ def page3(team:str, league:str=None):
 
     league_dist = distribution(league_df)
 
+    # 홈/원정 분리
     home_df = team_df[team_df.iloc[:, COL_HOME]==team]
     away_df = team_df[team_df.iloc[:, COL_AWAY]==team]
 
     home_dist = distribution(home_df)
     away_dist = distribution(away_df)
 
-    def block(title, dist, theme="win"):
+    def block(title, dist):
         return f"""
         <div class="card">
         <h4>{title}</h4>
@@ -769,14 +759,10 @@ border-radius:999px;
 transition:width 0.4s ease;
 }}
 
-button{{
-margin-top:12px;
-padding:6px 12px;
-border-radius:8px;
-}}
-
 .home-theme h4{{ color:#38bdf8; }}
 .away-theme h4{{ color:#f97316; }}
+
+button{{margin-top:12px;padding:6px 12px;border-radius:8px}}
 
 </style>
 </head>
@@ -789,7 +775,7 @@ border-radius:8px;
 
 <div class="flex">
 <div class="col">
-{block(team+" | 모든리그", league_all_dist)}
+{block(team+" | 모든리그", all_dist)}
 </div>
 <div class="col">
 {block(team+" | "+(league if league else "리그없음"), league_dist)}
@@ -827,26 +813,34 @@ def page4(win:float, draw:float, lose:float):
     draw = round(float(draw),2)
     lose = round(float(lose),2)
 
-    # dtype 방어
+    # 🔥 dtype 방어
     win_series  = pd.to_numeric(df.iloc[:, COL_WIN_ODDS],  errors="coerce").fillna(0).round(2)
     draw_series = pd.to_numeric(df.iloc[:, COL_DRAW_ODDS], errors="coerce").fillna(0).round(2)
     lose_series = pd.to_numeric(df.iloc[:, COL_LOSE_ODDS], errors="coerce").fillna(0).round(2)
 
+    # 1️⃣ 완전일치
     exact_df = df[
         (win_series==win) &
         (draw_series==draw) &
         (lose_series==lose)
     ]
-
     exact_dist = distribution(exact_df)
 
-    win_df  = df[win_series==win]
+    # 2️⃣ 승만 일치
+    win_df = df[win_series==win]
+
+    # 3️⃣ 무만 일치
     draw_df = df[draw_series==draw]
+
+    # 4️⃣ 패만 일치
     lose_df = df[lose_series==lose]
 
-    def block(title, dist):
+    def block(title, dist, highlight=False):
+
+        border = "border:2px solid #22d3ee;" if highlight else ""
+
         return f"""
-        <div class="card highlight">
+        <div class="card" style="{border}">
         <h4>{title}</h4>
         총 {dist["총"]}경기<br>
         승 {dist["wp"]}%{bar_html(dist["wp"],"win")}
@@ -856,6 +850,7 @@ def page4(win:float, draw:float, lose:float):
         """
 
     def general_loop(df_block):
+
         if df_block.empty:
             return "<div class='card'>데이터 없음</div>"
 
@@ -908,10 +903,6 @@ margin-bottom:18px;
 box-shadow:0 8px 30px rgba(0,0,0,0.4);
 }}
 
-.highlight{{
-border:2px solid #22d3ee;
-}}
-
 .bar-wrap{{
 width:100%;
 background:rgba(255,255,255,0.08);
@@ -927,7 +918,7 @@ border-radius:999px;
 transition:width 0.4s ease;
 }}
 
-details{{margin-top:20px}}
+details{{margin-top:18px}}
 
 button{{margin-top:12px;padding:6px 12px;border-radius:8px}}
 
@@ -940,7 +931,7 @@ button{{margin-top:12px;padding:6px 12px;border-radius:8px}}
 승 {win:.2f} / 무 {draw:.2f} / 패 {lose:.2f}
 </div>
 
-{block("완전일치 배당", exact_dist)}
+{block("완전일치 배당", exact_dist, True)}
 
 <details>
 <summary>승배당 {win:.2f} 일반 분포</summary>
