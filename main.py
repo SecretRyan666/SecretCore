@@ -167,12 +167,16 @@ def home():
 
     if LOGGED_IN:
         login_area = """
-        <form id="uploadForm" action="/upload-data" method="post" enctype="multipart/form-data" style="display:inline-flex;gap:6px;align-items:center;">
-            <input type="file" name="file" required style="font-size:12px;">
+        <div class="top-actions">
+        <form id="uploadForm" action="/upload-data" method="post" enctype="multipart/form-data">
+            <input type="file" name="file" required>
             <button type="submit" class="btn-primary">업로드</button>
         </form>
-        <a href="/logout"><button class="btn-primary">로그아웃</button></a>
-        """
+        <a href="/logout">
+            <button class="btn-primary logout-btn">로그아웃</button>
+        </a>
+    </div>
+    """
     else:
         login_area = """
         <form action="/login" method="post" style="display:inline-flex;gap:6px;">
@@ -281,6 +285,23 @@ margin-bottom:6px;
 
 .odds{
 font-size:13px;
+}
+
+.top-actions{
+display:flex;
+flex-direction:column;
+align-items:flex-end;
+gap:8px;
+}
+
+.top-actions form{
+display:flex;
+gap:6px;
+align-items:center;
+}
+
+.logout-btn{
+background:linear-gradient(135deg,#38bdf8,#2563eb);
 }
 
 </style>
