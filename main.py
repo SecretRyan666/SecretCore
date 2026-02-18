@@ -132,11 +132,17 @@ def upload(file: UploadFile = File(...)):
     if df.shape[1] < 17:
         return {"error":"컬럼 구조 오류"}
 
+    # 🔥 먼저 숫자형 변환
+    df.iloc[:, COL_WIN_ODDS]  = pd.to_numeric(df.iloc[:, COL_WIN_ODDS], errors="coerce").fillna(0).round(2)
+    df.iloc[:, COL_DRAW_ODDS] = pd.to_numeric(df.iloc[:, COL_DRAW_ODDS], errors="coerce").fillna(0).round(2)
+    df.iloc[:, COL_LOSE_ODDS] = pd.to_numeric(df.iloc[:, COL_LOSE_ODDS], errors="coerce").fillna(0).round(2)
+
+    # 🔥 그 다음 디스크 저장
     df.to_csv(DATA_FILE, index=False, encoding="utf-8-sig")
 
     CURRENT_DF = df
-    return RedirectResponse("/", status_code=302)
 
+    return RedirectResponse("/", status_code=302)
 
 # =====================================================
 # Page1 - 경기목록 API
