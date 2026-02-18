@@ -538,7 +538,7 @@ def detail(year:int, match:int):
 
     ev_data = ev_ai(base_dist,row)
 
-    return """
+    return f"""
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -623,8 +623,8 @@ border-radius:8px;
 승 {win_odds:.2f} / 무 {draw_odds:.2f} / 패 {lose_odds:.2f}
 
 <div class="ai-badge">
-🔥 시크릿 픽: {ev_data["추천"]}
-<span style="margin-left:10px;opacity:0.8;">AI 등급 {ev_data["AI"]}</span>
+🔥 시크릿 픽: {ev_data['추천']}
+<span style="margin-left:10px;opacity:0.8;">AI 등급 {ev_data['AI']}</span>
 </div>
 </div>
 
@@ -715,7 +715,7 @@ def page3(team:str, league:str=None):
         </div>
         """
 
-    return """
+    return f"""
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -889,7 +889,7 @@ def page4(win:float, draw:float, lose:float):
 
         return html
 
-    return """
+    return f"""
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
