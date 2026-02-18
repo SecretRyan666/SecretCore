@@ -293,12 +293,12 @@ async function loadFilters(){{
     for(let key in map){{
         let select = document.getElementById(key);
         select.innerHTML = `<option value="">${{map[key]}}</option>`;
-        data[key].forEach(val=>{
+        data[key].forEach(val=>{{
             let opt=document.createElement("option");
             opt.value=val;
             opt.text=val;
             select.appendChild(opt);
-        });
+        }});
         select.onchange=()=>setFilter("filter_"+key,select.value);
     }}
 }}
