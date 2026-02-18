@@ -159,7 +159,7 @@ def upload(file: UploadFile = File(...)):
 
 
 # =====================================================
-# Page1 UI (PRO + 필터 유지)
+# Page1 UI (FULL REPLACEMENT v2 - 버튼 재정렬)
 # =====================================================
 
 @app.get("/", response_class=HTMLResponse)
@@ -168,19 +168,19 @@ def home():
     if LOGGED_IN:
         login_area = """
         <div class="top-card">
-            <form action="/upload-data" method="post" enctype="multipart/form-data" class="upload-form">
+            <form action="/upload-data" method="post" enctype="multipart/form-data" class="upload-row">
                 <input type="file" name="file" required>
                 <button type="submit" class="btn-primary small-btn">업로드</button>
+                <a href="/logout">
+                    <button type="button" class="btn-primary logout-btn small-btn">로그아웃</button>
+                </a>
             </form>
-            <a href="/logout">
-                <button class="btn-primary logout-btn small-btn">로그아웃</button>
-            </a>
         </div>
         """
     else:
         login_area = """
         <div class="top-card">
-            <form action="/login" method="post" class="login-form">
+            <form action="/login" method="post" class="upload-row">
                 <input name="username" placeholder="ID">
                 <input name="password" type="password" placeholder="PW">
                 <button type="submit" class="btn-primary small-btn">로그인</button>
@@ -212,7 +212,6 @@ margin-bottom:15px;
 .title-box h1{{
 margin:0;
 font-size:24px;
-letter-spacing:1px;
 }}
 
 .top-card{{
@@ -220,23 +219,20 @@ background:rgba(30,41,59,0.9);
 padding:15px;
 border-radius:16px;
 margin-bottom:15px;
-display:flex;
-flex-direction:column;
-align-items:center;
-gap:10px;
 box-shadow:0 6px 25px rgba(0,0,0,0.4);
 }}
 
-.upload-form,
-.login-form{{
+.upload-row{{
 display:flex;
 gap:8px;
-flex-wrap:wrap;
+align-items:center;
 justify-content:center;
+flex-wrap:wrap;
 }}
 
-.login-form input,
-.upload-form input[type="file"]{{
+input[type="file"],
+input[name="username"],
+input[name="password"]{{
 padding:6px 8px;
 border-radius:8px;
 border:none;
@@ -244,30 +240,18 @@ border:none;
 
 .filters{{
 display:flex;
-gap:8px;
-flex-wrap:nowrap;
+gap:6px;
 overflow-x:auto;
 margin-bottom:15px;
-}}
-
-select{{
-border:none;
-border-radius:8px;
-padding:6px 10px;
-font-size:13px;
-background:#1e293b;
-color:white;
+align-items:center;
 }}
 
 .btn-primary{{
-height:32px;
-padding:0 14px;
+border:none;
 border-radius:10px;
 background:linear-gradient(135deg,#22d3ee,#3b82f6);
 color:#0f1720;
 font-weight:600;
-border:none;
-font-size:13px;
 }}
 
 .small-btn{{
@@ -280,10 +264,28 @@ padding:0 10px;
 background:linear-gradient(135deg,#38bdf8,#2563eb);
 }}
 
-.list-btn{{
-height:30px;
-font-size:12px;
-padding:0 10px;
+.big-btn{{
+height:40px;
+font-size:16px;
+padding:0 18px;
+}}
+
+.filter-btn{{
+height:28px;
+font-size:11px;
+padding:0 8px;
+background:#1e293b;
+color:white;
+}}
+
+select{{
+height:28px;
+font-size:11px;
+padding:0 6px;
+border:none;
+border-radius:8px;
+background:#1e293b;
+color:white;
 }}
 
 .card{{
@@ -294,24 +296,18 @@ border-radius:20px;
 margin-bottom:16px;
 box-shadow:0 8px 30px rgba(0,0,0,0.4);
 position:relative;
-transition:0.2s ease;
-}}
-
-.card:hover{{
-transform:translateY(-3px);
-box-shadow:0 12px 35px rgba(0,0,0,0.6);
 }}
 
 .info-btn{{
 position:absolute;
 right:12px;
 top:12px;
-height:28px;
-padding:0 12px;
+height:26px;
+padding:0 10px;
 border-radius:8px;
 background:#e2e8f0;
 color:#0f1720;
-font-size:12px;
+font-size:11px;
 border:none;
 }}
 
@@ -347,7 +343,7 @@ font-size:13px;
 {login_area}
 
 <div class="filters">
-<button onclick="resetFilters()" class="btn-primary list-btn">경기</button>
+<button onclick="resetFilters()" class="btn-primary big-btn">경기</button>
 <select id="type"></select>
 <select id="homeaway"></select>
 <select id="general"></select>
