@@ -127,7 +127,7 @@ def logout():
     return RedirectResponse("/", status_code=302)
 
 # =====================================================
-# 업로드
+# 업로드 (🔥 Cold Start 대응 포함)
 # =====================================================
 
 @app.post("/upload-data")
@@ -150,27 +150,26 @@ def upload(file: UploadFile = File(...)):
     return RedirectResponse("/", status_code=302)
 
 # =====================================================
-# Page1 UI (PRO 디자인 + 필터 localStorage 유지)
+# Page1 UI (PRO + 필터 유지 + 업로드 안정화)
 # =====================================================
 
 @app.get("/", response_class=HTMLResponse)
 def home():
 
-    login_area = ""
     if LOGGED_IN:
         login_area = """
-        <form action="/upload-data" method="post" enctype="multipart/form-data" style="display:inline-flex;gap:6px;align-items:center;">
+        <form id="uploadForm" action="/upload-data" method="post" enctype="multipart/form-data" style="display:inline-flex;gap:6px;align-items:center;">
             <input type="file" name="file" required style="font-size:12px;">
-            <button type="submit" class="btn">업로드</button>
+            <button type="submit" class="btn-primary">업로드</button>
         </form>
-        <a href="/logout"><button class="btn">로그아웃</button></a>
+        <a href="/logout"><button class="btn-primary">로그아웃</button></a>
         """
     else:
         login_area = """
         <form action="/login" method="post" style="display:inline-flex;gap:6px;">
             <input name="username" placeholder="ID" style="width:70px;">
             <input name="password" type="password" placeholder="PW" style="width:70px;">
-            <button type="submit" class="btn">로그인</button>
+            <button type="submit" class="btn-primary">로그인</button>
         </form>
         """
 
@@ -181,7 +180,10 @@ def home():
 <style>
 
 body{
-background:linear-gradient(135deg,#0f1720,#1e293b);
+background:
+radial-gradient(circle at 20% 20%,#1e293b,transparent 40%),
+radial-gradient(circle at 80% 80%,#0f1720,transparent 40%),
+#0f1720;
 color:white;
 font-family:Arial;
 padding:15px;
@@ -202,45 +204,58 @@ overflow-x:auto;
 margin-bottom:15px;
 }
 
-select,button{
+select{
 border:none;
 border-radius:8px;
 padding:6px 10px;
 font-size:13px;
-}
-
-.btn{
-background:#334155;
+background:#1e293b;
 color:white;
 }
 
-.btn:hover{
-background:#475569;
+.btn-primary{
+height:32px;
+padding:0 14px;
+border-radius:10px;
+background:linear-gradient(135deg,#22d3ee,#3b82f6);
+color:#0f1720;
+font-weight:600;
+border:none;
+font-size:13px;
 }
 
 .card{
-background:#1e293b;
-padding:14px;
-border-radius:16px;
-margin-bottom:14px;
-box-shadow:0 6px 20px rgba(0,0,0,0.4);
+background:rgba(30,41,59,0.9);
+backdrop-filter:blur(10px);
+padding:18px;
+border-radius:20px;
+margin-bottom:16px;
+box-shadow:0 8px 30px rgba(0,0,0,0.4);
 position:relative;
+transition:0.2s ease;
+}
+
+.card:hover{
+transform:translateY(-3px);
+box-shadow:0 12px 35px rgba(0,0,0,0.6);
 }
 
 .info-btn{
 position:absolute;
 right:12px;
 top:12px;
-background:#e2e8f0;
-color:black;
-padding:5px 10px;
+height:28px;
+padding:0 12px;
 border-radius:8px;
+background:#e2e8f0;
+color:#0f1720;
 font-size:12px;
+border:none;
 }
 
 .league{
-font-weight:bold;
-font-size:15px;
+font-weight:700;
+color:#38bdf8;
 margin-bottom:4px;
 }
 
@@ -261,16 +276,15 @@ font-size:13px;
 
 </style>
 </head>
-
 <body>
 
 <div class="header">
 <h2>SecretCore PRO</h2>
-<div id="login_area">""" + login_area + """</div>
+<div>""" + login_area + """</div>
 </div>
 
 <div class="filters">
-<button onclick="resetFilters()" class="btn">경기목록</button>
+<button onclick="resetFilters()" class="btn-primary">경기목록</button>
 <select id="type"></select>
 <select id="homeaway"></select>
 <select id="general"></select>
@@ -363,6 +377,29 @@ async function load(){
     document.getElementById("list").innerHTML=html;
 }
 
+/* 🔥 업로드 Cold Start 대응 */
+document.addEventListener("DOMContentLoaded", function(){
+
+    const uploadForm = document.getElementById("uploadForm");
+
+    if(uploadForm){
+        uploadForm.addEventListener("submit", async function(e){
+
+            e.preventDefault();
+
+            // 서버 깨우기
+            await fetch("/health");
+
+            // 0.5초 대기 후 업로드
+            setTimeout(()=>{
+                uploadForm.submit();
+            },500);
+
+        });
+    }
+
+});
+
 </script>
 
 </body>
@@ -370,7 +407,7 @@ async function load(){
 """
 
 # =====================================================
-# 필터용 고유값 API
+# 필터 고유값 API
 # =====================================================
 
 @app.get("/filters")
@@ -414,6 +451,15 @@ def matches(
     if df.empty:
         return []
 
+    # 기본조건: 경기전 + 일반/핸디1
+    base_df = df[
+        (df.iloc[:, COL_RESULT] == "경기전") &
+        (
+            (df.iloc[:, COL_TYPE] == "일반") |
+            (df.iloc[:, COL_TYPE] == "핸디1")
+        )
+    ]
+
     conditions = {}
 
     if filter_type:
@@ -427,22 +473,12 @@ def matches(
     if filter_handi:
         conditions[COL_HANDI] = filter_handi
 
-    filtered = run_filter(df, conditions)
+    filtered = run_filter(base_df, conditions)
 
-    # 🔥 경기전 + 일반/핸디1만 출력 (엔진 기본조건 유지)
-    filtered = filtered[
-        (filtered.iloc[:, COL_RESULT] == "경기전") &
-        (
-            (filtered.iloc[:, COL_TYPE] == "일반") |
-            (filtered.iloc[:, COL_TYPE] == "핸디1")
-        )
-    ]
-
-    # JSON 직렬화를 위해 list 반환
     return filtered.values.tolist()
 
 # =====================================================
-# PRO 막대그래프
+# PRO 막대그래프 (3색)
 # =====================================================
 
 def bar_html(percent, mode="win"):
@@ -461,7 +497,7 @@ def bar_html(percent, mode="win"):
 
 
 # =====================================================
-# Page2 - 상세 분석
+# Page2 - 대시보드 상세
 # =====================================================
 
 @app.get("/detail", response_class=HTMLResponse)
@@ -523,13 +559,32 @@ font-family:Arial;
 padding:20px;
 }}
 
+.summary-card{{
+background:linear-gradient(135deg,#1e293b,#0f1720);
+padding:20px;
+border-radius:22px;
+box-shadow:0 10px 40px rgba(0,0,0,0.5);
+margin-bottom:20px;
+}}
+
 .card{{
 background:rgba(30,41,59,0.9);
 backdrop-filter:blur(10px);
 padding:20px;
 border-radius:20px;
-margin-top:18px;
+margin-bottom:18px;
 box-shadow:0 8px 30px rgba(0,0,0,0.4);
+}}
+
+.flex{{
+display:flex;
+gap:20px;
+flex-wrap:wrap;
+}}
+
+.col{{
+flex:1;
+min-width:260px;
 }}
 
 .bar-wrap{{
@@ -547,15 +602,14 @@ border-radius:999px;
 transition:width 0.4s ease;
 }}
 
-.flex{{
-display:flex;
-gap:20px;
-flex-wrap:wrap;
-}}
-
-.col{{
-flex:1;
-min-width:260px;
+.ai-badge{{
+display:inline-block;
+padding:6px 14px;
+border-radius:999px;
+background:linear-gradient(135deg,#22c55e,#16a34a);
+color:#0f1720;
+font-weight:700;
+margin-top:10px;
 }}
 
 button{{
@@ -568,9 +622,12 @@ border-radius:8px;
 </head>
 <body>
 
+<div class="summary-card">
 <h3>[{league}] {home} vs {away}</h3>
 {cond_label}<br>
 승 {win_odds:.2f} / 무 {draw_odds:.2f} / 패 {lose_odds:.2f}
+<div class="ai-badge">추천: {ev_data["추천"]} | AI {ev_data["AI"]}</div>
+</div>
 
 <div class="card">
 <h4>5조건 완전일치</h4>
@@ -580,16 +637,19 @@ border-radius:8px;
 패 {base_dist["lp"]}%{bar_html(base_dist["lp"],"lose")}
 </div>
 
-<div class="card flex">
+<div class="flex">
 <div class="col">
+<div class="card">
 <h4>모든리그</h4>
 총 {base_dist["총"]}경기<br>
 승 {base_dist["wp"]}%{bar_html(base_dist["wp"],"win")}
 무 {base_dist["dp"]}%{bar_html(base_dist["dp"],"draw")}
 패 {base_dist["lp"]}%{bar_html(base_dist["lp"],"lose")}
 </div>
+</div>
 
 <div class="col">
+<div class="card">
 <h4>{league}</h4>
 총 {league_dist["총"]}경기<br>
 승 {league_dist["wp"]}%{bar_html(league_dist["wp"],"win")}
@@ -597,14 +657,6 @@ border-radius:8px;
 패 {league_dist["lp"]}%{bar_html(league_dist["lp"],"lose")}
 </div>
 </div>
-
-<div class="card">
-<h4>AI 분석</h4>
-추천: <b>{ev_data["추천"]}</b><br>
-AI 등급: <b>{ev_data["AI"]}</b><br>
-EV → 승 {ev_data["EV"]["승"]} /
-무 {ev_data["EV"]["무"]} /
-패 {ev_data["EV"]["패"]}
 </div>
 
 <a href="/page3?team={home}&league={league}"><button>홈팀 분석</button></a>
@@ -619,7 +671,7 @@ EV → 승 {ev_data["EV"]["승"]} /
 """
 
 # =====================================================
-# Page3 - 팀 분석 (PRO)
+# Page3 - 팀 분석 (대시보드형 PRO)
 # =====================================================
 
 @app.get("/page3", response_class=HTMLResponse)
@@ -644,26 +696,13 @@ def page3(team:str, league:str=None):
 
     league_dist = distribution(league_df)
 
-    home_game_df = team_df[team_df.iloc[:, COL_HOME]==team]
-    away_game_df = team_df[team_df.iloc[:, COL_AWAY]==team]
+    home_df = team_df[team_df.iloc[:, COL_HOME]==team]
+    away_df = team_df[team_df.iloc[:, COL_AWAY]==team]
 
-    home_game_dist = distribution(home_game_df)
-    away_game_dist = distribution(away_game_df)
+    home_dist = distribution(home_df)
+    away_dist = distribution(away_df)
 
-    dir_home_df = df[
-        (df.iloc[:, COL_HOME]==team) &
-        (df.iloc[:, COL_HOMEAWAY]=="홈")
-    ]
-
-    dir_away_df = df[
-        (df.iloc[:, COL_HOME]==team) &
-        (df.iloc[:, COL_HOMEAWAY]=="원정")
-    ]
-
-    dir_home_dist = distribution(dir_home_df)
-    dir_away_dist = distribution(dir_away_df)
-
-    def block(title, dist):
+    def block(title, dist, theme="win"):
         return f"""
         <div class="card">
         <h4>{title}</h4>
@@ -687,13 +726,32 @@ font-family:Arial;
 padding:20px;
 }}
 
+.summary-card{{
+background:linear-gradient(135deg,#1e293b,#0f1720);
+padding:20px;
+border-radius:22px;
+box-shadow:0 10px 40px rgba(0,0,0,0.5);
+margin-bottom:20px;
+}}
+
 .card{{
 background:rgba(30,41,59,0.9);
 backdrop-filter:blur(10px);
 padding:20px;
 border-radius:20px;
-margin-top:18px;
+margin-bottom:18px;
 box-shadow:0 8px 30px rgba(0,0,0,0.4);
+}}
+
+.flex{{
+display:flex;
+gap:20px;
+flex-wrap:wrap;
+}}
+
+.col{{
+flex:1;
+min-width:260px;
 }}
 
 .bar-wrap{{
@@ -711,28 +769,23 @@ border-radius:999px;
 transition:width 0.4s ease;
 }}
 
-.flex{{
-display:flex;
-gap:20px;
-flex-wrap:wrap;
-}}
-
-.col{{
-flex:1;
-min-width:260px;
-}}
-
 button{{
 margin-top:12px;
 padding:6px 12px;
 border-radius:8px;
 }}
 
+.home-theme h4{{ color:#38bdf8; }}
+.away-theme h4{{ color:#f97316; }}
+
 </style>
 </head>
 <body>
 
+<div class="summary-card">
 <h3>{team} 팀 분석</h3>
+{("리그: "+league) if league else ""}
+</div>
 
 <div class="flex">
 <div class="col">
@@ -744,20 +797,11 @@ border-radius:8px;
 </div>
 
 <div class="flex">
-<div class="col">
-{block(team+" | 홈경기", home_game_dist)}
+<div class="col home-theme">
+{block(team+" | 홈경기", home_dist)}
 </div>
-<div class="col">
-{block(team+" | 원정경기", away_game_dist)}
-</div>
-</div>
-
-<div class="flex">
-<div class="col">
-{block(team+" | 홈방향", dir_home_dist)}
-</div>
-<div class="col">
-{block(team+" | 원정방향", dir_away_dist)}
+<div class="col away-theme">
+{block(team+" | 원정경기", away_dist)}
 </div>
 </div>
 
@@ -768,7 +812,7 @@ border-radius:8px;
 """
 
 # =====================================================
-# Page4 - 배당 분석 (PRO)
+# Page4 - 배당 분석 (대시보드형 PRO)
 # =====================================================
 
 @app.get("/page4", response_class=HTMLResponse)
@@ -783,6 +827,7 @@ def page4(win:float, draw:float, lose:float):
     draw = round(float(draw),2)
     lose = round(float(lose),2)
 
+    # dtype 방어
     win_series  = pd.to_numeric(df.iloc[:, COL_WIN_ODDS],  errors="coerce").fillna(0).round(2)
     draw_series = pd.to_numeric(df.iloc[:, COL_DRAW_ODDS], errors="coerce").fillna(0).round(2)
     lose_series = pd.to_numeric(df.iloc[:, COL_LOSE_ODDS], errors="coerce").fillna(0).round(2)
@@ -801,7 +846,7 @@ def page4(win:float, draw:float, lose:float):
 
     def block(title, dist):
         return f"""
-        <div class="card">
+        <div class="card highlight">
         <h4>{title}</h4>
         총 {dist["총"]}경기<br>
         승 {dist["wp"]}%{bar_html(dist["wp"],"win")}
@@ -811,7 +856,6 @@ def page4(win:float, draw:float, lose:float):
         """
 
     def general_loop(df_block):
-
         if df_block.empty:
             return "<div class='card'>데이터 없음</div>"
 
@@ -847,13 +891,25 @@ font-family:Arial;
 padding:20px;
 }}
 
+.summary-card{{
+background:linear-gradient(135deg,#1e293b,#0f1720);
+padding:20px;
+border-radius:22px;
+box-shadow:0 10px 40px rgba(0,0,0,0.5);
+margin-bottom:20px;
+}}
+
 .card{{
 background:rgba(30,41,59,0.9);
 backdrop-filter:blur(10px);
 padding:20px;
 border-radius:20px;
-margin-top:18px;
+margin-bottom:18px;
 box-shadow:0 8px 30px rgba(0,0,0,0.4);
+}}
+
+.highlight{{
+border:2px solid #22d3ee;
 }}
 
 .bar-wrap{{
@@ -871,7 +927,7 @@ border-radius:999px;
 transition:width 0.4s ease;
 }}
 
-details{{margin-top:18px}}
+details{{margin-top:20px}}
 
 button{{margin-top:12px;padding:6px 12px;border-radius:8px}}
 
@@ -879,9 +935,12 @@ button{{margin-top:12px;padding:6px 12px;border-radius:8px}}
 </head>
 <body>
 
+<div class="summary-card">
 <h3>배당 분석</h3>
+승 {win:.2f} / 무 {draw:.2f} / 패 {lose:.2f}
+</div>
 
-{block(f"{win:.2f} / {draw:.2f} / {lose:.2f}", exact_dist)}
+{block("완전일치 배당", exact_dist)}
 
 <details>
 <summary>승배당 {win:.2f} 일반 분포</summary>
@@ -904,7 +963,6 @@ button{{margin-top:12px;padding:6px 12px;border-radius:8px}}
 </body>
 </html>
 """
-
 
 # =====================================================
 # Health Check
