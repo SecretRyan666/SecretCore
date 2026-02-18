@@ -129,17 +129,15 @@ def logout():
     LOGGED_IN = False
     return RedirectResponse("/", status_code=302)
 
+
 # =====================================================
-# 🔥 업로드 (메모리 최적화 버전)
+# 업로드 (메모리 최적화)
 # =====================================================
 
 @app.post("/upload-data")
 def upload(file: UploadFile = File(...)):
     global CURRENT_DF
 
-    # 🔥 raw.read() 제거
-    # 🔥 BytesIO 제거
-    # 🔥 직접 스트림 로딩
     df = pd.read_csv(
         file.file,
         encoding="utf-8-sig",
@@ -159,8 +157,9 @@ def upload(file: UploadFile = File(...)):
 
     return RedirectResponse("/", status_code=302)
 
+
 # =====================================================
-# Page1 UI (PRO + 필터 유지 + 업로드 안정화)
+# Page1 UI (PRO + 필터 유지)
 # =====================================================
 
 @app.get("/", response_class=HTMLResponse)
@@ -399,7 +398,6 @@ async function load(){
 
 </body>
 </html>
-"""
 
 # =====================================================
 # 필터 고유값 API
@@ -446,7 +444,6 @@ def matches(
     if df.empty:
         return []
 
-    # 기본조건: 경기전 + 일반/핸디1
     base_df = df[
         (df.iloc[:, COL_RESULT] == "경기전") &
         (
@@ -472,6 +469,7 @@ def matches(
 
     return filtered.values.tolist()
 
+
 # =====================================================
 # PRO 막대그래프 (3색)
 # =====================================================
@@ -490,9 +488,8 @@ def bar_html(percent, mode="win"):
     </div>
     """
 
-
 # =====================================================
-# Page2 - 상세 대시보드
+# Page2 - 상세 대시보드 (🔥 시크릿 픽 적용)
 # =====================================================
 
 @app.get("/detail", response_class=HTMLResponse)
@@ -599,12 +596,15 @@ transition:width 0.4s ease;
 
 .ai-badge{{
 display:inline-block;
-padding:6px 14px;
+padding:8px 18px;
 border-radius:999px;
 background:linear-gradient(135deg,#22c55e,#16a34a);
 color:#0f1720;
-font-weight:700;
-margin-top:10px;
+font-weight:800;
+font-size:15px;
+margin-top:12px;
+box-shadow:0 0 15px rgba(34,197,94,0.6);
+letter-spacing:0.5px;
 }}
 
 button{{
@@ -621,7 +621,11 @@ border-radius:8px;
 <h3>[{league}] {home} vs {away}</h3>
 {cond_label}<br>
 승 {win_odds:.2f} / 무 {draw_odds:.2f} / 패 {lose_odds:.2f}
-<div class="ai-badge">추천: {ev_data["추천"]} | AI {ev_data["AI"]}</div>
+
+<div class="ai-badge">
+🔥 시크릿 픽: {ev_data["추천"]}
+<span style="margin-left:10px;opacity:0.8;">AI 등급 {ev_data["AI"]}</span>
+</div>
 </div>
 
 <div class="card">
@@ -693,7 +697,7 @@ def page3(team:str, league:str=None):
 
     league_dist = distribution(league_df)
 
-    # 홈/원정 분리
+    # 홈 / 원정 분리
     home_df = team_df[team_df.iloc[:, COL_HOME]==team]
     away_df = team_df[team_df.iloc[:, COL_AWAY]==team]
 
@@ -770,7 +774,11 @@ transition:width 0.4s ease;
 .home-theme h4{{ color:#38bdf8; }}
 .away-theme h4{{ color:#f97316; }}
 
-button{{margin-top:12px;padding:6px 12px;border-radius:8px}}
+button{{
+margin-top:12px;
+padding:6px 12px;
+border-radius:8px;
+}}
 
 </style>
 </head>
@@ -821,7 +829,7 @@ def page4(win:float, draw:float, lose:float):
     draw = round(float(draw),2)
     lose = round(float(lose),2)
 
-    # 🔥 dtype 방어
+    # dtype 방어
     win_series  = pd.to_numeric(df.iloc[:, COL_WIN_ODDS],  errors="coerce").fillna(0).round(2)
     draw_series = pd.to_numeric(df.iloc[:, COL_DRAW_ODDS], errors="coerce").fillna(0).round(2)
     lose_series = pd.to_numeric(df.iloc[:, COL_LOSE_ODDS], errors="coerce").fillna(0).round(2)
@@ -962,6 +970,7 @@ button{{margin-top:12px;padding:6px 12px;border-radius:8px}}
 </body>
 </html>
 """
+
 
 # =====================================================
 # Health Check
