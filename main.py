@@ -341,21 +341,25 @@ async function loadFilters(){
         let select = document.getElementById(key);
         select.innerHTML = "<option value=''>" + map[key] + "</option>";
 
-        data[key].forEach(val=>{
+        data[key].forEach(function(val){
             let opt=document.createElement("option");
             opt.value=val;
             opt.text=val;
             select.appendChild(opt);
         });
 
-        select.onchange=()=>setFilter("filter_"+key,select.value);
+        select.onchange=function(){
+            setFilter("filter_"+key,select.value);
+        };
     }
 }
 
 function resetFilters(){
     filters={};
     saveFilters();
-    document.querySelectorAll("select").forEach(s=>s.value="");
+    document.querySelectorAll("select").forEach(function(s){
+        s.value="";
+    });
     load();
 }
 
@@ -366,6 +370,10 @@ function setFilter(key,val){
     load();
 }
 
+function goDetail(year, match){
+    window.location.href = "/detail?year=" + year + "&match=" + match;
+}
+
 async function load(){
     let query=new URLSearchParams(filters).toString();
     let r=await fetch('/matches?'+query);
@@ -373,12 +381,12 @@ async function load(){
 
     let html="";
 
-    data.forEach(m=>{
-        html+=
+    data.forEach(function(m){
+        html +=
         "<div class='card'>"+
         "<div class='league'>"+m[5]+"</div>"+
         "<div class='match'><b>"+m[6]+"</b> vs <b>"+m[7]+"</b></div>"+
-        "<button class='info-btn' onclick=\"location.href='/detail?year="+m[1]+"&match="+m[3]+"'\">정보</button>"+
+        "<button class='info-btn' onclick='goDetail("+m[1]+","+m[3]+")'>정보</button>"+
         "<div class='condition'>"+m[14]+" · "+m[16]+" · "+m[11]+" · "+m[15]+" · "+m[12]+"</div>"+
         "<div class='odds'>승 "+Number(m[8]).toFixed(2)+" | 무 "+Number(m[9]).toFixed(2)+" | 패 "+Number(m[10]).toFixed(2)+"</div>"+
         "</div>";
