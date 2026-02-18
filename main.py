@@ -165,10 +165,10 @@ def upload(file: UploadFile = File(...)):
 @app.get("/", response_class=HTMLResponse)
 def home():
 
-    if LOGGED_IN:
-        login_area = """
-        <div class="top-actions">
-        <form id="uploadForm" action="/upload-data" method="post" enctype="multipart/form-data">
+   if LOGGED_IN:
+    login_area = """
+    <div class="top-actions">
+        <form action="/upload-data" method="post" enctype="multipart/form-data">
             <input type="file" name="file" required>
             <button type="submit" class="btn-primary">업로드</button>
         </form>
@@ -202,11 +202,44 @@ font-family:Arial;
 padding:15px;
 }
 
-.header{
+.top-wrapper{
 display:flex;
-justify-content:space-between;
+flex-direction:column;
 align-items:center;
-margin-bottom:15px;
+gap:12px;
+margin-bottom:20px;
+}
+
+.logo-area{
+text-align:center;
+}
+
+.logo-area h2{
+margin:0;
+font-size:26px;
+}
+
+.action-area{
+width:100%;
+display:flex;
+justify-content:flex-end;
+}
+
+.top-actions{
+display:flex;
+flex-direction:column;
+align-items:flex-end;
+gap:8px;
+}
+
+.top-actions form{
+display:flex;
+gap:6px;
+align-items:center;
+}
+
+.logout-btn{
+background:linear-gradient(135deg,#38bdf8,#2563eb);
 }
 
 .filters{
@@ -304,15 +337,28 @@ align-items:center;
 background:linear-gradient(135deg,#38bdf8,#2563eb);
 }
 
+.filters button{
+padding:4px 10px;
+font-size:12px;
+border-radius:8px;
+height:28px;
+}
+
 </style>
 </head>
 <body>
 
-<div class="header">
-<h2>SecretCore PRO</h2>
-<div>""" + login_area + """</div>
-</div>
+<div class="top-wrapper">
 
+    <div class="logo-area">
+        <h2>SecretCore PRO</h2>
+    </div>
+
+    <div class="action-area">
+        """ + login_area + """
+    </div>
+
+</div>
 <div class="filters">
 <button onclick="resetFilters()" class="btn-primary">경기목록</button>
 <select id="type"></select>
