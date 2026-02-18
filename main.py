@@ -538,7 +538,7 @@ def detail(year:int, match:int):
 
     ev_data = ev_ai(base_dist,row)
 
-    return f"""
+    return """
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -715,7 +715,7 @@ def page3(team:str, league:str=None):
         </div>
         """
 
-    return f"""
+    return """
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -889,7 +889,7 @@ def page4(win:float, draw:float, lose:float):
 
         return html
 
-    return f"""
+    return """
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
