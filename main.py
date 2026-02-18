@@ -177,6 +177,7 @@ def home():
         </a>
     </div>
     """
+
     else:
         login_area = """
         <form action="/login" method="post" style="display:inline-flex;gap:6px;">
