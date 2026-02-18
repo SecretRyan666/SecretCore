@@ -165,19 +165,18 @@ def upload(file: UploadFile = File(...)):
 @app.get("/", response_class=HTMLResponse)
 def home():
 
-   if LOGGED_IN:
-    login_area = """
-    <div class="top-actions">
-        <form action="/upload-data" method="post" enctype="multipart/form-data">
-            <input type="file" name="file" required>
-            <button type="submit" class="btn-primary">업로드</button>
-        </form>
-        <a href="/logout">
-            <button class="btn-primary logout-btn">로그아웃</button>
-        </a>
-    </div>
-    """
-
+    if LOGGED_IN:
+        login_area = """
+        <div class="top-actions">
+            <form action="/upload-data" method="post" enctype="multipart/form-data">
+                <input type="file" name="file" required>
+                <button type="submit" class="btn-primary">업로드</button>
+            </form>
+            <a href="/logout">
+                <button class="btn-primary logout-btn">로그아웃</button>
+            </a>
+        </div>
+        """
     else:
         login_area = """
         <form action="/login" method="post" style="display:inline-flex;gap:6px;">
