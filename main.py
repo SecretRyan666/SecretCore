@@ -217,10 +217,13 @@ def matches(filter_type:str=None,
 # Page1 UI (🔥 디자인 통일 + 버튼정렬)
 # =====================================================
 
+# =====================================================
+# Page1 UI (f-string 제거 안전버전)
+# =====================================================
+
 @app.get("/", response_class=HTMLResponse)
 def home():
 
-    login_area = ""
     if LOGGED_IN:
         login_area = """
         <form action="/upload-data" method="post" enctype="multipart/form-data" style="display:inline;">
@@ -238,24 +241,24 @@ def home():
         </form>
         """
 
-    return f"""
+    return """
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
-body{{background:#0f1720;color:white;font-family:Arial;padding:20px}}
-.header{{display:flex;justify-content:space-between;align-items:center}}
-.filters{{display:flex;gap:10px;margin-top:15px;flex-wrap:wrap}}
-select,button{{padding:6px}}
-.card{{background:#1e293b;padding:15px;border-radius:15px;margin-top:15px;position:relative}}
-.info-btn{{position:absolute;right:15px;top:15px}}
+body{background:#0f1720;color:white;font-family:Arial;padding:20px}
+.header{display:flex;justify-content:space-between;align-items:center}
+.filters{display:flex;gap:10px;margin-top:15px;flex-wrap:wrap}
+select,button{padding:6px}
+.card{background:#1e293b;padding:15px;border-radius:15px;margin-top:15px;position:relative}
+.info-btn{position:absolute;right:15px;top:15px}
 </style>
 </head>
 <body>
 
 <div class="header">
 <h2>SecretCore PRO</h2>
-<div>{login_area}</div>
+<div>""" + login_area + """</div>
 </div>
 
 <div class="filters">
@@ -271,72 +274,76 @@ select,button{{padding:6px}}
 
 <script>
 
-let filters = {{}};
+let filters = {};
 
-window.onload = async function(){{
+window.onload = async function(){
     await loadFilters();
     load();
-}}
+}
 
-async function loadFilters(){{
+async function loadFilters(){
     let r = await fetch('/filters');
     let data = await r.json();
 
-    const map = {{
+    const map = {
         type:"유형",
         homeaway:"홈원정",
         general:"일반",
         dir:"정역",
         handi:"핸디"
-    }};
+    };
 
-    for(let key in map){{
+    for(let key in map){
         let select = document.getElementById(key);
-        select.innerHTML = `<option value="">${{map[key]}}</option>`;
-        data[key].forEach(val=>{{
+        select.innerHTML = `<option value="">${map[key]}</option>`;
+        data[key].forEach(function(val){
             let opt=document.createElement("option");
             opt.value=val;
             opt.text=val;
             select.appendChild(opt);
-        }});
-        select.onchange=()=>setFilter("filter_"+key,select.value);
-    }}
-}}
+        });
+        select.onchange=function(){
+            setFilter("filter_"+key,select.value);
+        };
+    }
+}
 
-function resetFilters(){{
-    filters={{}};
-    document.querySelectorAll("select").forEach(s=>s.value="");
+function resetFilters(){
+    filters={};
+    document.querySelectorAll("select").forEach(function(s){
+        s.value="";
+    });
     load();
-}}
+}
 
-function setFilter(key,val){{
+function setFilter(key,val){
     if(val==="") delete filters[key];
     else filters[key]=val;
     load();
-}}
+}
 
-async function load(){{
+async function load(){
     let query=new URLSearchParams(filters).toString();
     let r=await fetch('/matches?'+query);
     let data=await r.json();
     let html="";
-    data.forEach(m=>{
+    data.forEach(function(m){
         html+=`
         <div class="card">
-        <b>${{m[5]}}</b><br>
-        <b>${{m[6]}}</b> vs <b>${{m[7]}}</b>
+        <b>${m[5]}</b><br>
+        <b>${m[6]}</b> vs <b>${m[7]}</b>
         <button class="info-btn"
-        onclick="location.href='/detail?year=${{m[1]}}&match=${{m[3]}}'">정보</button>
+        onclick="location.href='/detail?year=${m[1]}&match=${m[3]}'">정보</button>
         <br>
-        ${{m[14]}} · ${{m[16]}} · ${{m[11]}} · ${{m[15]}} · ${{m[12]}}
+        ${m[14]} · ${m[16]} · ${m[11]} · ${m[15]} · ${m[12]}
         <br>
-        승 ${{Number(m[8]).toFixed(2)}} |
-        무 ${{Number(m[9]).toFixed(2)}} |
-        패 ${{Number(m[10]).toFixed(2)}}
+        승 ${Number(m[8]).toFixed(2)} |
+        무 ${Number(m[9]).toFixed(2)} |
+        패 ${Number(m[10]).toFixed(2)}
         </div>`;
     });
     document.getElementById("list").innerHTML=html;
-}}
+}
 
 </script>
 
