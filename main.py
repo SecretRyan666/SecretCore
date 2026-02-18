@@ -799,7 +799,7 @@ button{{margin-top:12px;padding:6px 12px;border-radius:8px}}
 </div>
 </div>
 
-<a href="/"><button>← 경기목록</button></a>
+<button onclick="history.back()">← 뒤로</button>
 
 </body>
 </html>
@@ -957,7 +957,7 @@ button{{margin-top:12px;padding:6px 12px;border-radius:8px}}
 </details>
 
 <br>
-<a href="/"><button>← 경기목록</button></a>
+<button onclick="history.back()">← 뒤로</button>
 
 </body>
 </html>
