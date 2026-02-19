@@ -259,11 +259,8 @@ def matches(
 
     return filtered.values.tolist()
 
-
 # =====================================================
-# Page1 - 경기목록 (설계 반영)
-# - 카드 조건값 출력
-# - 배당 2자리 고정 표시
+# Page1 - DarkPro 원본 복구 + 증분 병합
 # =====================================================
 
 @app.get("/", response_class=HTMLResponse)
@@ -271,10 +268,15 @@ def home():
 
     if not LOGGED_IN:
         return """
-        <html>
-        <body style="background:#0f1720;color:white;display:flex;justify-content:center;align-items:center;height:100vh;font-family:Arial;">
+        <html lang="ko">
+        <head>
+        <meta charset="utf-8">
+        </head>
+        <body style="background:#0f1720;color:white;
+                     display:flex;justify-content:center;
+                     align-items:center;height:100vh;font-family:Arial;">
         <form action="/login" method="post">
-            <h3>Login</h3>
+            <h2>Login</h2>
             <input name="username" placeholder="ID"><br><br>
             <input name="password" type="password" placeholder="PW"><br><br>
             <button type="submit">로그인</button>
@@ -284,31 +286,174 @@ def home():
         """
 
     return """
-<html>
+<html lang="ko">
 <head>
+<meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
 <style>
-body{background:#0f1720;color:white;font-family:Arial;margin:0}
-.header{padding:14px;background:#111827}
-.card{background:#1e293b;margin:14px;padding:18px;border-radius:16px;position:relative}
-.league{color:#38bdf8;font-weight:600}
-.condition{font-size:12px;opacity:0.7;margin-top:4px}
-.odds{margin-top:6px}
-.info-btn{position:absolute;right:14px;top:14px}
+
+body{
+background:#0f1720;
+color:white;
+font-family:Arial;
+margin:0;
+}
+
+.header{
+display:flex;
+justify-content:space-between;
+align-items:center;
+padding:14px 18px;
+background:rgba(17,24,39,0.95);
+position:sticky;
+top:0;
+z-index:50;
+}
+
+.logo{
+font-weight:700;
+font-size:18px;
+background:linear-gradient(90deg,#22d3ee,#38bdf8);
+-webkit-background-clip:text;
+color:transparent;
+}
+
+.top-icons{
+display:flex;
+gap:18px;
+font-size:18px;
+}
+
+.top-icons div{
+cursor:pointer;
+padding:6px;
+border-radius:8px;
+}
+
+.top-icons div:hover{
+background:rgba(255,255,255,0.08);
+}
+
+.condition-bar{
+padding:8px 16px;
+font-size:12px;
+opacity:0.75;
+border-bottom:1px solid rgba(255,255,255,0.05);
+}
+
+.card{
+background:linear-gradient(145deg,#1e293b,#111827);
+margin:14px;
+padding:18px;
+border-radius:18px;
+position:relative;
+box-shadow:0 10px 30px rgba(0,0,0,0.4);
+}
+
+.league{
+color:#38bdf8;
+font-weight:600;
+font-size:13px;
+}
+
+.match{
+margin-top:4px;
+margin-bottom:6px;
+}
+
+.condition{
+font-size:12px;
+opacity:0.7;
+margin-bottom:6px;
+}
+
+.info-btn{
+position:absolute;
+right:14px;
+top:50%;
+transform:translateY(-120%);
+font-size:12px;
+cursor:pointer;
+}
+
+.star-btn{
+position:absolute;
+right:14px;
+top:50%;
+transform:translateY(20%);
+font-size:18px;
+cursor:pointer;
+color:#6b7280;
+}
+
+.star-active{
+color:#facc15;
+}
+
+.bottom-nav{
+position:fixed;
+bottom:0;
+width:100%;
+background:#111827;
+display:flex;
+justify-content:space-around;
+padding:12px 0;
+font-size:20px;
+}
+
 </style>
 </head>
+
 <body>
 
 <div class="header">
-<b>SecretCore PRO</b>
-<a href="/logout" style="float:right;color:white">로그아웃</a>
+    <div class="logo">SecretCore PRO</div>
+    <div class="top-icons">
+        <div onclick="location.href='/page-upload'">📤</div>
+        <div onclick="resetFilter()">🔄</div>
+        <div onclick="location.href='/favorites'">⭐</div>
+        <div onclick="location.href='/logout'">👤</div>
+    </div>
 </div>
 
-<div id="list"></div>
+<div class="condition-bar" id="conditionBar">
+경기전 · 일반/핸디1
+</div>
+
+<div id="list" style="padding-bottom:100px;"></div>
+
+<div class="bottom-nav">
+    <a href="/ledger">🏠</a>
+    <a href="/memo">📝</a>
+    <a href="/capture">📸</a>
+    <a href="/favorites">⭐</a>
+</div>
 
 <script>
 
+async function toggleFav(home,away,el){
+    let res = await fetch("/fav-toggle",{
+        method:"POST",
+        headers:{"Content-Type":"application/x-www-form-urlencoded"},
+        body:`home=${home}&away=${away}`
+    });
+
+    let data = await res.json();
+
+    if(data.status=="added"){
+        el.classList.add("star-active");
+    }else{
+        el.classList.remove("star-active");
+    }
+}
+
+function goDetail(year,match){
+    location.href="/detail?year="+year+"&match="+match;
+}
+
 async function load(){
+
     let r = await fetch('/matches');
     let data = await r.json();
 
@@ -319,22 +464,24 @@ async function load(){
         html += `
         <div class="card">
             <div class="league">${m[5]}</div>
-            <div><b>${m[6]}</b> vs <b>${m[7]}</b></div>
+            <div class="match"><b>${m[6]}</b> vs <b>${m[7]}</b></div>
 
             <div class="condition">
-                ${m[14]} · ${m[16]} · ${m[11]} · ${m[15]} · ${m[12]}
+            ${m[14]} · ${m[16]} · ${m[11]} · ${m[15]} · ${m[12]}
             </div>
 
-            <div class="odds">
-                승 ${Number(m[8]).toFixed(2)} |
-                무 ${Number(m[9]).toFixed(2)} |
-                패 ${Number(m[10]).toFixed(2)}
+            <div>
+            승 ${Number(m[8]).toFixed(2)} |
+            무 ${Number(m[9]).toFixed(2)} |
+            패 ${Number(m[10]).toFixed(2)}
             </div>
 
-            <button class="info-btn"
-            onclick="location.href='/detail?year=${m[1]}&match=${m[3]}'">
-            정보
-            </button>
+            <div class="info-btn"
+                 onclick="goDetail(${m[1]},${m[3]})">정보</div>
+
+            <div class="star-btn"
+                 onclick="toggleFav('${m[6]}','${m[7]}',this)">★</div>
+
         </div>
         `;
     });
@@ -349,6 +496,7 @@ load();
 </body>
 </html>
 """
+
 # =====================================================
 # Page2 - 상세 분석 (좌우 비교 + EV 하단 포함)
 # =====================================================
