@@ -42,11 +42,7 @@ LEDGER = []
 def load_data():
     global CURRENT_DF
     if os.path.exists(DATA_FILE):
-        df = pd.read_csv(
-            DATA_FILE,
-            encoding="utf-8-sig",
-            low_memory=True
-        )
+        df = pd.read_csv(DATA_FILE, encoding="utf-8-sig", low_memory=True)
 
         df.iloc[:, COL_WIN_ODDS]  = pd.to_numeric(df.iloc[:, COL_WIN_ODDS], errors="coerce").fillna(0).round(2)
         df.iloc[:, COL_DRAW_ODDS] = pd.to_numeric(df.iloc[:, COL_DRAW_ODDS], errors="coerce").fillna(0).round(2)
@@ -132,7 +128,6 @@ def logout():
     LOGGED_IN = False
     return RedirectResponse("/", status_code=302)
 
-
 # =====================================================
 # 업로드 전용 페이지
 # =====================================================
@@ -144,7 +139,12 @@ def page_upload():
         return RedirectResponse("/", status_code=302)
 
     return """
-    <html>
+    <html lang="ko">
+    <head>
+    <meta charset="utf-8">
+    <meta http-equiv="Content-Language" content="ko">
+    <meta name="google" content="notranslate">
+    </head>
     <body style='background:#0f1720;color:white;padding:30px;font-family:Arial;'>
     <h2>📤 업로드</h2>
     <form action="/upload-data" method="post" enctype="multipart/form-data">
@@ -157,9 +157,8 @@ def page_upload():
     </html>
     """
 
-
 # =====================================================
-# Page1 - DarkPro 통합 UI
+# Page1 - DarkPro 통합 UI (강화버전)
 # =====================================================
 
 @app.get("/", response_class=HTMLResponse)
@@ -167,8 +166,15 @@ def home():
 
     if not LOGGED_IN:
         return """
-        <html>
-        <body style="background:#0f1720;color:white;font-family:Arial;display:flex;justify-content:center;align-items:center;height:100vh;">
+        <html lang="ko">
+        <head>
+        <meta charset="utf-8">
+        <meta http-equiv="Content-Language" content="ko">
+        <meta name="google" content="notranslate">
+        </head>
+        <body style="background:#0f1720;color:white;font-family:Arial;
+                     display:flex;justify-content:center;
+                     align-items:center;height:100vh;">
         <form action="/login" method="post">
             <h2>Login</h2>
             <input name="username" placeholder="ID"><br><br>
@@ -180,9 +186,13 @@ def home():
         """
 
     return """
-<html>
+<html lang="ko">
 <head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Language" content="ko">
+<meta name="google" content="notranslate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
 <style>
 
 body{
@@ -201,25 +211,37 @@ background:rgba(17,24,39,0.95);
 backdrop-filter:blur(12px);
 position:sticky;
 top:0;
-z-index:10;
+z-index:50;
 }
 
 .logo{
 font-weight:700;
 font-size:18px;
+background:linear-gradient(90deg,#22d3ee,#38bdf8);
+-webkit-background-clip:text;
+color:transparent;
 }
 
 .top-icons{
 display:flex;
-gap:16px;
+gap:18px;
 font-size:18px;
+}
+
+.top-icons div{
 cursor:pointer;
+padding:6px;
+border-radius:8px;
+}
+
+.top-icons div:hover{
+background:rgba(255,255,255,0.08);
 }
 
 .condition-bar{
 padding:8px 16px;
 font-size:12px;
-opacity:0.7;
+opacity:0.75;
 border-bottom:1px solid rgba(255,255,255,0.05);
 }
 
@@ -245,28 +267,38 @@ margin-bottom:6px;
 
 .secret{
 position:absolute;
-left:14px;
-top:14px;
+top:50%;
+left:63%;
+transform:translate(-50%,-50%);
 background:#22c55e;
 color:#0f1720;
 font-size:11px;
-padding:3px 8px;
+padding:4px 10px;
 border-radius:999px;
 font-weight:700;
 }
 
 .info-btn{
 position:absolute;
-right:40px;
-top:14px;
+right:14px;
+top:50%;
+transform:translateY(-120%);
+font-size:12px;
 cursor:pointer;
 }
 
 .star-btn{
 position:absolute;
 right:14px;
-top:14px;
+top:50%;
+transform:translateY(20%);
+font-size:18px;
 cursor:pointer;
+color:#6b7280;
+}
+
+.star-active{
+color:#facc15;
 }
 
 .bottom-nav{
@@ -280,39 +312,12 @@ padding:12px 0;
 font-size:20px;
 }
 
-.modal{
-display:none;
-position:fixed;
-bottom:0;
-width:100%;
-background:#1e293b;
-padding:20px;
-border-radius:20px 20px 0 0;
-}
-
-select{
-width:100%;
-margin-bottom:10px;
-padding:8px;
-background:#0f1720;
-color:white;
-border:none;
-border-radius:8px;
-}
-
-button{
-padding:6px 12px;
-border-radius:8px;
-border:none;
-cursor:pointer;
-}
-
 </style>
 </head>
 <body>
 
 <div class="header">
-    <div class="logo">SecretCore</div>
+    <div class="logo">SecretCore PRO</div>
     <div class="top-icons">
         <div onclick="openFilter()">⚙️</div>
         <div onclick="resetFilter()">🔄</div>
@@ -329,28 +334,14 @@ cursor:pointer;
 
 <div class="bottom-nav">
     <a href="/ledger">🏠</a>
-    <a href="/memo">🌍</a>
+    <a href="/memo">📝</a>
     <a href="/capture">📸</a>
-    <a href="/favorites">📰</a>
-</div>
-
-<div class="modal" id="filterModal">
-    <h3>페이지필터</h3>
-    <select id="typeSelect"></select>
-    <select id="homeawaySelect"></select>
-    <select id="generalSelect"></select>
-    <select id="dirSelect"></select>
-    <select id="handiSelect"></select>
-    <button onclick="applyFilter()">적용</button>
+    <a href="/favorites">⭐</a>
 </div>
 
 <script>
 
 let filters = JSON.parse(localStorage.getItem("filters")||"{}");
-
-function openFilter(){
-    document.getElementById("filterModal").style.display="block";
-}
 
 function resetFilter(){
     filters = {};
@@ -358,15 +349,24 @@ function resetFilter(){
     load();
 }
 
-function applyFilter(){
-    filters.type = document.getElementById("typeSelect").value;
-    filters.homeaway = document.getElementById("homeawaySelect").value;
-    filters.general = document.getElementById("generalSelect").value;
-    filters.dir = document.getElementById("dirSelect").value;
-    filters.handi = document.getElementById("handiSelect").value;
-    localStorage.setItem("filters",JSON.stringify(filters));
-    document.getElementById("filterModal").style.display="none";
-    load();
+async function toggleFav(home,away,el){
+    let res = await fetch("/fav-toggle",{
+        method:"POST",
+        headers:{"Content-Type":"application/x-www-form-urlencoded"},
+        body:`home=${home}&away=${away}`
+    });
+
+    let data = await res.json();
+
+    if(data.status=="added"){
+        el.classList.add("star-active");
+    }else{
+        el.classList.remove("star-active");
+    }
+}
+
+function goDetail(year,match){
+    location.href="/detail?year="+year+"&match="+match;
 }
 
 async function load(){
@@ -387,25 +387,13 @@ async function load(){
             <div class="league">${m[5]}</div>
             <div class="match"><b>${m[6]}</b> vs <b>${m[7]}</b></div>
             <div>승 ${Number(m[8]).toFixed(2)} | 무 ${Number(m[9]).toFixed(2)} | 패 ${Number(m[10]).toFixed(2)}</div>
-            <div class="info-btn" onclick="goDetail(${m[1]},${m[3]})">ℹ️</div>
-            <div class="star-btn" onclick="toggleFav('${m[6]}','${m[7]}')">⭐</div>
+            <div class="info-btn" onclick="goDetail(${m[1]},${m[3]})">정보</div>
+            <div class="star-btn" onclick="toggleFav('${m[6]}','${m[7]}',this)">★</div>
         </div>
         `;
     });
 
     document.getElementById("list").innerHTML = html;
-}
-
-function goDetail(year,match){
-    location.href = "/detail?year="+year+"&match="+match;
-}
-
-async function toggleFav(home,away){
-    await fetch("/fav-toggle",{
-        method:"POST",
-        headers:{"Content-Type":"application/x-www-form-urlencoded"},
-        body:`home=${home}&away=${away}`
-    });
 }
 
 load();
@@ -417,18 +405,14 @@ load();
 """
 
 # =====================================================
-# 업로드
+# 업로드 처리
 # =====================================================
 
 @app.post("/upload-data")
 def upload(file: UploadFile = File(...)):
     global CURRENT_DF
 
-    df = pd.read_csv(
-        file.file,
-        encoding="utf-8-sig",
-        low_memory=True
-    )
+    df = pd.read_csv(file.file, encoding="utf-8-sig", low_memory=True)
 
     if df.shape[1] < 17:
         return {"error":"컬럼 구조 오류"}
@@ -441,7 +425,6 @@ def upload(file: UploadFile = File(...)):
     CURRENT_DF = df
 
     return RedirectResponse("/", status_code=302)
-
 
 # =====================================================
 # 필터 고유값 API
@@ -469,9 +452,8 @@ def filters():
         "handi": sorted(df.iloc[:, COL_HANDI].dropna().unique().tolist())
     }
 
-
 # =====================================================
-# 경기목록 API (경기전 + 일반/핸디1 기본고정)
+# 경기목록 API (기본: 경기전 + 일반/핸디1)
 # =====================================================
 
 @app.get("/matches")
@@ -488,7 +470,7 @@ def matches(
     if df.empty:
         return []
 
-    # 기본조건
+    # 기본조건 고정
     base_df = df[
         (df.iloc[:, COL_RESULT] == "경기전") &
         (
@@ -513,7 +495,6 @@ def matches(
     filtered = run_filter(base_df, conditions)
 
     return filtered.values.tolist()
-
 
 # =====================================================
 # 즐겨찾기
@@ -546,7 +527,12 @@ def favorites():
         """
 
     return f"""
-    <html>
+    <html lang="ko">
+    <head>
+    <meta charset="utf-8">
+    <meta http-equiv="Content-Language" content="ko">
+    <meta name="google" content="notranslate">
+    </head>
     <body style='background:#0f1720;color:white;padding:20px;'>
     <h2>즐겨찾기 목록</h2>
     {html}
@@ -554,7 +540,6 @@ def favorites():
     </body>
     </html>
     """
-
 
 # =====================================================
 # 가계부
@@ -566,7 +551,12 @@ def ledger():
     total = sum(item.get("profit",0) for item in LEDGER)
 
     return f"""
-    <html>
+    <html lang="ko">
+    <head>
+    <meta charset="utf-8">
+    <meta http-equiv="Content-Language" content="ko">
+    <meta name="google" content="notranslate">
+    </head>
     <body style='background:#0f1720;color:white;padding:20px;'>
     <h2>가계부</h2>
     총합: {round(total,2)}
@@ -575,7 +565,6 @@ def ledger():
     </html>
     """
 
-
 # =====================================================
 # 메모장
 # =====================================================
@@ -583,7 +572,12 @@ def ledger():
 @app.get("/memo", response_class=HTMLResponse)
 def memo():
     return """
-    <html>
+    <html lang="ko">
+    <head>
+    <meta charset="utf-8">
+    <meta http-equiv="Content-Language" content="ko">
+    <meta name="google" content="notranslate">
+    </head>
     <body style='background:#0f1720;color:white;padding:20px;'>
     <h2>메모장</h2>
     <textarea style='width:100%;height:300px;background:#1e293b;color:white;'></textarea>
@@ -592,7 +586,6 @@ def memo():
     </html>
     """
 
-
 # =====================================================
 # 캡처
 # =====================================================
@@ -600,14 +593,18 @@ def memo():
 @app.get("/capture", response_class=HTMLResponse)
 def capture():
     return """
-    <html>
+    <html lang="ko">
+    <head>
+    <meta charset="utf-8">
+    <meta http-equiv="Content-Language" content="ko">
+    <meta name="google" content="notranslate">
+    </head>
     <body style='background:#0f1720;color:white;padding:20px;'>
     <h2>캡처</h2>
     <button onclick="history.back()">← 뒤로</button>
     </body>
     </html>
     """
-
 
 # =====================================================
 # Health Check
@@ -639,7 +636,6 @@ def bar_html(percent, mode="win"):
                     height:100%;border-radius:999px;"></div>
     </div>
     """
-
 
 # =====================================================
 # Page2 - 상세
@@ -689,7 +685,12 @@ def detail(year:int, match:int):
     ev_data = ev_ai(base_dist,row)
 
     return f"""
-    <html>
+    <html lang="ko">
+    <head>
+    <meta charset="utf-8">
+    <meta http-equiv="Content-Language" content="ko">
+    <meta name="google" content="notranslate">
+    </head>
     <body style="background:#0f1720;color:white;font-family:Arial;padding:20px;">
 
     <h2>[{league}] {home} vs {away}</h2>
@@ -718,7 +719,6 @@ def detail(year:int, match:int):
     </html>
     """
 
-
 # =====================================================
 # Page3
 # =====================================================
@@ -745,7 +745,12 @@ def page3(team:str, league:str=None):
     league_dist = distribution(league_df)
 
     return f"""
-    <html>
+    <html lang="ko">
+    <head>
+    <meta charset="utf-8">
+    <meta http-equiv="Content-Language" content="ko">
+    <meta name="google" content="notranslate">
+    </head>
     <body style="background:#0f1720;color:white;padding:20px;">
 
     <h2>{team} 팀 분석</h2>
@@ -766,9 +771,8 @@ def page3(team:str, league:str=None):
     </html>
     """
 
-
 # =====================================================
-# Page4
+# Page4 - 배당 분석 (완전일치 + 단일조건 확장)
 # =====================================================
 
 @app.get("/page4", response_class=HTMLResponse)
@@ -786,32 +790,60 @@ def page4(win:float, draw:float, lose:float):
     draw_series = pd.to_numeric(df.iloc[:, COL_DRAW_ODDS], errors="coerce").fillna(0).round(2)
     lose_series = pd.to_numeric(df.iloc[:, COL_LOSE_ODDS], errors="coerce").fillna(0).round(2)
 
+    # 완전일치
     exact_df = df[
         (win_series==win) &
         (draw_series==draw) &
         (lose_series==lose)
     ]
-
     exact_dist = distribution(exact_df)
 
+    # 승 동일
+    win_df = df[win_series==win]
+    win_dist = distribution(win_df)
+
+    # 무 동일
+    draw_df = df[draw_series==draw]
+    draw_dist = distribution(draw_df)
+
+    # 패 동일
+    lose_df = df[lose_series==lose]
+    lose_dist = distribution(lose_df)
+
+    def block(title, dist):
+        return f"""
+        <div style="margin-bottom:22px;padding:16px;
+                    background:#1e293b;border-radius:14px;">
+            <h3>{title}</h3>
+            총 {dist["총"]}경기<br>
+            승 {dist["wp"]}% {bar_html(dist["wp"],"win")}
+            무 {dist["dp"]}% {bar_html(dist["dp"],"draw")}
+            패 {dist["lp"]}% {bar_html(dist["lp"],"lose")}
+        </div>
+        """
+
     return f"""
-    <html>
+    <html lang="ko">
+    <head>
+    <meta charset="utf-8">
+    <meta http-equiv="Content-Language" content="ko">
+    <meta name="google" content="notranslate">
+    </head>
     <body style="background:#0f1720;color:white;padding:20px;">
 
     <h2>배당 분석</h2>
     승 {win:.2f} / 무 {draw:.2f} / 패 {lose:.2f}
 
-    <h3>완전일치 통계</h3>
-    승 {exact_dist["wp"]}%<br>
-    무 {exact_dist["dp"]}%<br>
-    패 {exact_dist["lp"]}%<br>
+    {block("완전일치 통계", exact_dist)}
+    {block("승배당 동일 통계", win_dist)}
+    {block("무배당 동일 통계", draw_dist)}
+    {block("패배당 동일 통계", lose_dist)}
 
     <button onclick="history.back()">← 뒤로</button>
 
     </body>
     </html>
     """
-
 
 # =====================================================
 # 로컬 실행
