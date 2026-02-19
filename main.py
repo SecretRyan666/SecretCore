@@ -6,7 +6,7 @@ import os
 app = FastAPI()
 
 # =====================================================
-# 절대참조 인덱스 (고정)
+# 절대참조 인덱스 (고정 구조)
 # =====================================================
 
 COL_NO        = 0
@@ -27,37 +27,27 @@ COL_TYPE      = 14
 COL_DIR       = 15
 COL_HOMEAWAY  = 16
 
-EXPECTED_COLS = 17
-
 DATA_FILE = "current_data.csv"
 
 CURRENT_DF = pd.DataFrame()
 LOGGED_IN = False
+
 FAVORITES = []
 LEDGER = []
 
 # =====================================================
-# 데이터 로드 (안정화 강화)
+# 서버 재시작 자동 로드 (문자열 유지 안정화)
 # =====================================================
-
-def validate_structure(df):
-    if df.shape[1] < EXPECTED_COLS:
-        raise ValueError("컬럼 구조 오류: 17개 미만")
 
 def load_data():
     global CURRENT_DF
-
     if os.path.exists(DATA_FILE):
         df = pd.read_csv(
             DATA_FILE,
             encoding="utf-8-sig",
-            dtype=str,          # 🔥 문자열 유지
+            dtype=str,
             low_memory=False
         )
-
-        validate_structure(df)
-
-        # 🔥 배당은 문자열 그대로 유지 (완전일치 오차 0 보장)
         CURRENT_DF = df
 
 load_data()
@@ -67,21 +57,16 @@ load_data()
 # =====================================================
 
 def run_filter(df, conditions: dict):
-    if df.empty:
-        return df
-
     filtered = df
     for col_idx, val in conditions.items():
-        if val is None or val == "":
+        if val is None:
             continue
         filtered = filtered[filtered.iloc[:, col_idx] == val]
-
     return filtered
 
 
 def distribution(df):
     total = len(df)
-
     if total == 0:
         return {"총":0,"승":0,"무":0,"패":0,"wp":0,"dp":0,"lp":0}
 
@@ -91,9 +76,9 @@ def distribution(df):
     draw = (result_col == "무").sum()
     lose = (result_col == "패").sum()
 
-    wp = round((win/total)*100,2) if total else 0
-    dp = round((draw/total)*100,2) if total else 0
-    lp = round((lose/total)*100,2) if total else 0
+    wp = round(win/total*100,2)
+    dp = round(draw/total*100,2)
+    lp = round(lose/total*100,2)
 
     return {
         "총":int(total),
@@ -107,19 +92,14 @@ def distribution(df):
 
 
 def ev_ai(dist, row):
-    try:
-        win_odds  = float(row.iloc[COL_WIN_ODDS])
-        draw_odds = float(row.iloc[COL_DRAW_ODDS])
-        lose_odds = float(row.iloc[COL_LOSE_ODDS])
-    except:
-        return {
-            "EV":{"승":0,"무":0,"패":0},
-            "추천":"없음"
-        }
 
-    ev_w = dist["wp"]/100 * win_odds  - 1
-    ev_d = dist["dp"]/100 * draw_odds - 1
-    ev_l = dist["lp"]/100 * lose_odds - 1
+    win_odds  = float(row.iloc[COL_WIN_ODDS])
+    draw_odds = float(row.iloc[COL_DRAW_ODDS])
+    lose_odds = float(row.iloc[COL_LOSE_ODDS])
+
+    ev_w = dist["wp"]/100*win_odds - 1
+    ev_d = dist["dp"]/100*draw_odds - 1
+    ev_l = dist["lp"]/100*lose_odds - 1
 
     ev_map = {"승":ev_w,"무":ev_d,"패":ev_l}
     best = max(ev_map, key=ev_map.get)
@@ -131,17 +111,6 @@ def ev_ai(dist, row):
             "패":round(ev_l,3)
         },
         "추천":best
-    }
-
-# =====================================================
-# 헬스체크
-# =====================================================
-
-@app.get("/health")
-def health():
-    return {
-        "data_loaded": not CURRENT_DF.empty,
-        "rows": len(CURRENT_DF)
     }
 
 # =====================================================
@@ -164,7 +133,35 @@ def logout():
 
 
 # =====================================================
-# 업로드 처리 (문자열 유지 구조)
+# 업로드 전용 페이지
+# =====================================================
+
+@app.get("/page-upload", response_class=HTMLResponse)
+def page_upload():
+
+    if not LOGGED_IN:
+        return RedirectResponse("/", status_code=302)
+
+    return """
+    <html lang="ko">
+    <head>
+    <meta charset="utf-8">
+    </head>
+    <body style='background:#0f1720;color:white;padding:30px;font-family:Arial;'>
+    <h2>📤 업로드</h2>
+    <form action="/upload-data" method="post" enctype="multipart/form-data">
+        <input type="file" name="file" required><br><br>
+        <button type="submit">업로드 실행</button>
+    </form>
+    <br>
+    <button onclick="history.back()">← 뒤로</button>
+    </body>
+    </html>
+    """
+
+
+# =====================================================
+# 업로드 처리 (문자열 유지 방식으로 수정 완료)
 # =====================================================
 
 @app.post("/upload-data")
@@ -178,9 +175,9 @@ def upload(file: UploadFile = File(...)):
         low_memory=False
     )
 
-    validate_structure(df)
+    if df.shape[1] < 17:
+        return {"error": "컬럼 구조 오류"}
 
-    # 🔥 배당은 문자열 그대로 저장
     df.to_csv(DATA_FILE, index=False, encoding="utf-8-sig")
     CURRENT_DF = df
 
@@ -188,79 +185,7 @@ def upload(file: UploadFile = File(...)):
 
 
 # =====================================================
-# 필터 고유값 API
-# =====================================================
-
-@app.get("/filters")
-def filters():
-
-    df = CURRENT_DF
-
-    if df.empty:
-        return {
-            "type":[],
-            "homeaway":[],
-            "general":[],
-            "dir":[],
-            "handi":[]
-        }
-
-    return {
-        "type": sorted(df.iloc[:, COL_TYPE].dropna().unique().tolist()),
-        "homeaway": sorted(df.iloc[:, COL_HOMEAWAY].dropna().unique().tolist()),
-        "general": sorted(df.iloc[:, COL_GENERAL].dropna().unique().tolist()),
-        "dir": sorted(df.iloc[:, COL_DIR].dropna().unique().tolist()),
-        "handi": sorted(df.iloc[:, COL_HANDI].dropna().unique().tolist())
-    }
-
-
-# =====================================================
-# 경기목록 API (Page1 전용 고정조건 적용)
-# 기본조건: 경기전 + 유형 일반/핸디1
-# =====================================================
-
-@app.get("/matches")
-def matches(
-    type: str = None,
-    homeaway: str = None,
-    general: str = None,
-    dir: str = None,
-    handi: str = None
-):
-
-    df = CURRENT_DF
-
-    if df.empty:
-        return []
-
-    # 🔒 Page1 고정조건
-    base_df = df[
-        (df.iloc[:, COL_RESULT] == "경기전") &
-        (
-            (df.iloc[:, COL_TYPE] == "일반") |
-            (df.iloc[:, COL_TYPE] == "핸디1")
-        )
-    ]
-
-    conditions = {}
-
-    if type:
-        conditions[COL_TYPE] = type
-    if homeaway:
-        conditions[COL_HOMEAWAY] = homeaway
-    if general:
-        conditions[COL_GENERAL] = general
-    if dir:
-        conditions[COL_DIR] = dir
-    if handi:
-        conditions[COL_HANDI] = handi
-
-    filtered = run_filter(base_df, conditions)
-
-    return filtered.values.tolist()
-
-# =====================================================
-# Page1 - DarkPro 원본 복구 + 증분 병합
+# Page1 - DarkPro 통합 UI (전 배포 구조 복구)
 # =====================================================
 
 @app.get("/", response_class=HTMLResponse)
@@ -268,13 +193,10 @@ def home():
 
     if not LOGGED_IN:
         return """
-        <html lang="ko">
-        <head>
-        <meta charset="utf-8">
-        </head>
-        <body style="background:#0f1720;color:white;
+        <html>
+        <body style="background:#0f1720;color:white;font-family:Arial;
                      display:flex;justify-content:center;
-                     align-items:center;height:100vh;font-family:Arial;">
+                     align-items:center;height:100vh;">
         <form action="/login" method="post">
             <h2>Login</h2>
             <input name="username" placeholder="ID"><br><br>
@@ -286,9 +208,8 @@ def home():
         """
 
     return """
-<html lang="ko">
+<html>
 <head>
-<meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
@@ -305,7 +226,7 @@ display:flex;
 justify-content:space-between;
 align-items:center;
 padding:14px 18px;
-background:rgba(17,24,39,0.95);
+background:#111827;
 position:sticky;
 top:0;
 z-index:50;
@@ -314,9 +235,7 @@ z-index:50;
 .logo{
 font-weight:700;
 font-size:18px;
-background:linear-gradient(90deg,#22d3ee,#38bdf8);
--webkit-background-clip:text;
-color:transparent;
+color:#38bdf8;
 }
 
 .top-icons{
@@ -327,52 +246,20 @@ font-size:18px;
 
 .top-icons div{
 cursor:pointer;
-padding:6px;
-border-radius:8px;
-}
-
-.top-icons div:hover{
-background:rgba(255,255,255,0.08);
-}
-
-.condition-bar{
-padding:8px 16px;
-font-size:12px;
-opacity:0.75;
-border-bottom:1px solid rgba(255,255,255,0.05);
 }
 
 .card{
-background:linear-gradient(145deg,#1e293b,#111827);
+background:#1e293b;
 margin:14px;
 padding:18px;
 border-radius:18px;
 position:relative;
-box-shadow:0 10px 30px rgba(0,0,0,0.4);
-}
-
-.league{
-color:#38bdf8;
-font-weight:600;
-font-size:13px;
-}
-
-.match{
-margin-top:4px;
-margin-bottom:6px;
-}
-
-.condition{
-font-size:12px;
-opacity:0.7;
-margin-bottom:6px;
 }
 
 .info-btn{
 position:absolute;
 right:14px;
-top:50%;
-transform:translateY(-120%);
+top:12px;
 font-size:12px;
 cursor:pointer;
 }
@@ -380,8 +267,7 @@ cursor:pointer;
 .star-btn{
 position:absolute;
 right:14px;
-top:50%;
-transform:translateY(20%);
+top:40px;
 font-size:18px;
 cursor:pointer;
 color:#6b7280;
@@ -404,21 +290,14 @@ font-size:20px;
 
 </style>
 </head>
-
 <body>
 
 <div class="header">
     <div class="logo">SecretCore PRO</div>
     <div class="top-icons">
         <div onclick="location.href='/page-upload'">📤</div>
-        <div onclick="resetFilter()">🔄</div>
-        <div onclick="location.href='/favorites'">⭐</div>
         <div onclick="location.href='/logout'">👤</div>
     </div>
-</div>
-
-<div class="condition-bar" id="conditionBar">
-경기전 · 일반/핸디1
 </div>
 
 <div id="list" style="padding-bottom:100px;"></div>
@@ -463,25 +342,10 @@ async function load(){
 
         html += `
         <div class="card">
-            <div class="league">${m[5]}</div>
-            <div class="match"><b>${m[6]}</b> vs <b>${m[7]}</b></div>
-
-            <div class="condition">
-            ${m[14]} · ${m[16]} · ${m[11]} · ${m[15]} · ${m[12]}
-            </div>
-
-            <div>
-            승 ${Number(m[8]).toFixed(2)} |
-            무 ${Number(m[9]).toFixed(2)} |
-            패 ${Number(m[10]).toFixed(2)}
-            </div>
-
-            <div class="info-btn"
-                 onclick="goDetail(${m[1]},${m[3]})">정보</div>
-
-            <div class="star-btn"
-                 onclick="toggleFav('${m[6]}','${m[7]}',this)">★</div>
-
+            <div><b>${m[6]}</b> vs <b>${m[7]}</b></div>
+            <div>승 ${m[8]} | 무 ${m[9]} | 패 ${m[10]}</div>
+            <div class="info-btn" onclick="goDetail('${m[1]}','${m[3]}')">정보</div>
+            <div class="star-btn" onclick="toggleFav('${m[6]}','${m[7]}',this)">★</div>
         </div>
         `;
     });
@@ -498,34 +362,215 @@ load();
 """
 
 # =====================================================
-# Page2 - 상세 분석 (좌우 비교 + EV 하단 포함)
+# 필터 고유값 API
 # =====================================================
 
-def bar_html(percent):
-    return f"""
-    <div style="
-        width:100%;
-        background:#334155;
-        border-radius:8px;
-        overflow:hidden;
-        height:14px;
-        margin:6px 0 10px 0">
-        <div style="
-            height:100%;
-            width:{percent}%;
-            background:#22c55e;">
+@app.get("/filters")
+def filters():
+
+    df = CURRENT_DF
+
+    if df.empty:
+        return {
+            "type":[],
+            "homeaway":[],
+            "general":[],
+            "dir":[],
+            "handi":[]
+        }
+
+    return {
+        "type": sorted(df.iloc[:, COL_TYPE].dropna().unique().tolist()),
+        "homeaway": sorted(df.iloc[:, COL_HOMEAWAY].dropna().unique().tolist()),
+        "general": sorted(df.iloc[:, COL_GENERAL].dropna().unique().tolist()),
+        "dir": sorted(df.iloc[:, COL_DIR].dropna().unique().tolist()),
+        "handi": sorted(df.iloc[:, COL_HANDI].dropna().unique().tolist())
+    }
+
+
+# =====================================================
+# 경기목록 API (기본조건: 경기전 + 일반/핸디1)
+# =====================================================
+
+@app.get("/matches")
+def matches(
+    type: str = None,
+    homeaway: str = None,
+    general: str = None,
+    dir: str = None,
+    handi: str = None
+):
+
+    df = CURRENT_DF
+
+    if df.empty:
+        return []
+
+    # 기본조건 고정
+    base_df = df[
+        (df.iloc[:, COL_RESULT] == "경기전") &
+        (
+            (df.iloc[:, COL_TYPE] == "일반") |
+            (df.iloc[:, COL_TYPE] == "핸디1")
+        )
+    ]
+
+    conditions = {}
+
+    if type:
+        conditions[COL_TYPE] = type
+    if homeaway:
+        conditions[COL_HOMEAWAY] = homeaway
+    if general:
+        conditions[COL_GENERAL] = general
+    if dir:
+        conditions[COL_DIR] = dir
+    if handi:
+        conditions[COL_HANDI] = handi
+
+    filtered = run_filter(base_df, conditions)
+
+    return filtered.values.tolist()
+
+
+# =====================================================
+# 즐겨찾기
+# =====================================================
+
+@app.post("/fav-toggle")
+def fav_toggle(home:str = Form(...), away:str = Form(...)):
+    global FAVORITES
+
+    exist = next((f for f in FAVORITES if f["home"]==home and f["away"]==away), None)
+
+    if exist:
+        FAVORITES = [f for f in FAVORITES if not (f["home"]==home and f["away"]==away)]
+        return {"status":"removed"}
+    else:
+        FAVORITES.append({"home":home,"away":away})
+        return {"status":"added"}
+
+
+@app.get("/favorites", response_class=HTMLResponse)
+def favorites():
+
+    html = ""
+
+    for f in FAVORITES:
+        html += f"""
+        <div style='background:#1e293b;margin:10px;padding:15px;border-radius:12px;'>
+        {f["home"]} vs {f["away"]}
         </div>
+        """
+
+    return f"""
+    <html>
+    <body style='background:#0f1720;color:white;padding:20px;'>
+    <h2>즐겨찾기 목록</h2>
+    {html}
+    <button onclick="history.back()">← 뒤로</button>
+    </body>
+    </html>
+    """
+
+
+# =====================================================
+# 가계부
+# =====================================================
+
+@app.get("/ledger", response_class=HTMLResponse)
+def ledger():
+
+    total = sum(item.get("profit",0) for item in LEDGER)
+
+    return f"""
+    <html>
+    <body style='background:#0f1720;color:white;padding:20px;'>
+    <h2>가계부</h2>
+    총합: {round(total,2)}
+    <button onclick="history.back()">← 뒤로</button>
+    </body>
+    </html>
+    """
+
+
+# =====================================================
+# 메모장
+# =====================================================
+
+@app.get("/memo", response_class=HTMLResponse)
+def memo():
+    return """
+    <html>
+    <body style='background:#0f1720;color:white;padding:20px;'>
+    <h2>메모장</h2>
+    <textarea style='width:100%;height:300px;background:#1e293b;color:white;'></textarea>
+    <button onclick="history.back()">← 뒤로</button>
+    </body>
+    </html>
+    """
+
+
+# =====================================================
+# 캡처
+# =====================================================
+
+@app.get("/capture", response_class=HTMLResponse)
+def capture():
+    return """
+    <html>
+    <body style='background:#0f1720;color:white;padding:20px;'>
+    <h2>캡처</h2>
+    <button onclick="history.back()">← 뒤로</button>
+    </body>
+    </html>
+    """
+
+
+# =====================================================
+# Health Check
+# =====================================================
+
+@app.get("/health")
+def health():
+    return {
+        "data_loaded": not CURRENT_DF.empty,
+        "rows": len(CURRENT_DF)
+    }
+
+# =====================================================
+# PRO 막대그래프
+# =====================================================
+
+def bar_html(percent, mode="win"):
+
+    color_map = {
+        "win":"linear-gradient(90deg,#22c55e,#16a34a)",
+        "draw":"linear-gradient(90deg,#94a3b8,#64748b)",
+        "lose":"linear-gradient(90deg,#ef4444,#dc2626)"
+    }
+
+    return f"""
+    <div style="width:100%;background:rgba(255,255,255,0.08);
+                border-radius:999px;height:14px;margin:6px 0;">
+        <div style="width:{percent}%;background:{color_map[mode]};
+                    height:100%;border-radius:999px;"></div>
     </div>
     """
 
 
+# =====================================================
+# Page2 - 상세 분석 (문자열 비교 수정 반영)
+# =====================================================
+
 @app.get("/detail", response_class=HTMLResponse)
-def detail(year:int, match:int):
+def detail(year:str, match:str):
 
     df = CURRENT_DF
     if df.empty:
         return "<h2>데이터 없음</h2>"
 
+    # 🔧 문자열 비교로 수정 (핵심 안정화)
     row_df = df[
         (df.iloc[:, COL_YEAR] == str(year)) &
         (df.iloc[:, COL_MATCH] == str(match))
@@ -540,113 +585,61 @@ def detail(year:int, match:int):
     home   = row.iloc[COL_HOME]
     away   = row.iloc[COL_AWAY]
 
+    # 배당은 문자열 → 계산 시 float 변환
     win_odds  = float(row.iloc[COL_WIN_ODDS])
     draw_odds = float(row.iloc[COL_DRAW_ODDS])
     lose_odds = float(row.iloc[COL_LOSE_ODDS])
 
-    # 🔒 5조건
     base_cond = {
-        COL_TYPE: row.iloc[COL_TYPE],
-        COL_HOMEAWAY: row.iloc[COL_HOMEAWAY],
-        COL_GENERAL: row.iloc[COL_GENERAL],
-        COL_DIR: row.iloc[COL_DIR],
-        COL_HANDI: row.iloc[COL_HANDI]
+        COL_TYPE:row.iloc[COL_TYPE],
+        COL_HOMEAWAY:row.iloc[COL_HOMEAWAY],
+        COL_GENERAL:row.iloc[COL_GENERAL],
+        COL_DIR:row.iloc[COL_DIR],
+        COL_HANDI:row.iloc[COL_HANDI]
     }
 
     base_df = run_filter(df, base_cond)
     base_dist = distribution(base_df)
 
-    # 동일리그
     league_cond = base_cond.copy()
     league_cond[COL_LEAGUE] = league
-
     league_df = run_filter(df, league_cond)
     league_dist = distribution(league_df)
 
-    ev_data = ev_ai(base_dist, row)
-
-    cond_label = f"{row.iloc[COL_TYPE]} · {row.iloc[COL_HOMEAWAY]} · {row.iloc[COL_GENERAL]} · {row.iloc[COL_DIR]} · {row.iloc[COL_HANDI]}"
+    ev_data = ev_ai(base_dist,row)
 
     return f"""
-<html>
-<head>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<style>
-body{{background:#0f1720;color:white;font-family:Arial;padding:20px}}
-.card{{background:#1e293b;padding:18px;border-radius:16px;margin-top:18px}}
-.flex{{display:flex;gap:20px;flex-wrap:wrap}}
-.col{{flex:1;min-width:260px}}
-button{{margin-top:10px;padding:6px 12px;border-radius:6px}}
-</style>
-</head>
-<body>
+    <html>
+    <body style="background:#0f1720;color:white;font-family:Arial;padding:20px;">
 
-<h3>[{league}] {home} vs {away}</h3>
-{cond_label}<br>
-승 {win_odds:.2f} /
-무 {draw_odds:.2f} /
-패 {lose_odds:.2f}
+    <h2>[{league}] {home} vs {away}</h2>
+    승 {win_odds:.2f} / 무 {draw_odds:.2f} / 패 {lose_odds:.2f}
+    <br><br>
+    <b>추천: {ev_data["추천"]}</b>
 
-<div class="card">
-<h4>조건 분포 비교</h4>
+    <h3>5조건 완전일치</h3>
+    승 {base_dist["wp"]}% {bar_html(base_dist["wp"],"win")}
+    무 {base_dist["dp"]}% {bar_html(base_dist["dp"],"draw")}
+    패 {base_dist["lp"]}% {bar_html(base_dist["lp"],"lose")}
 
-<div class="flex">
-<div class="col">
-<b>전체 5조건</b><br>
-총 {base_dist["총"]}경기<br>
-승 {base_dist["wp"]}% ({base_dist["승"]})
-{bar_html(base_dist["wp"])}
-무 {base_dist["dp"]}% ({base_dist["무"]})
-{bar_html(base_dist["dp"])}
-패 {base_dist["lp"]}% ({base_dist["패"]})
-{bar_html(base_dist["lp"])}
-</div>
+    <h3>리그 통계</h3>
+    승 {league_dist["wp"]}% {bar_html(league_dist["wp"],"win")}
+    무 {league_dist["dp"]}% {bar_html(league_dist["dp"],"draw")}
+    패 {league_dist["lp"]}% {bar_html(league_dist["lp"],"lose")}
 
-<div class="col">
-<b>{league} 동일조건</b><br>
-총 {league_dist["총"]}경기<br>
-승 {league_dist["wp"]}% ({league_dist["승"]})
-{bar_html(league_dist["wp"])}
-무 {league_dist["dp"]}% ({league_dist["무"]})
-{bar_html(league_dist["dp"])}
-패 {league_dist["lp"]}% ({league_dist["패"]})
-{bar_html(league_dist["lp"])}
-</div>
-</div>
+    <br>
+    <a href="/page3?team={home}&league={league}">홈팀 분석</a><br>
+    <a href="/page3?team={away}&league={league}">원정팀 분석</a><br>
+    <a href="/page4?win={row.iloc[COL_WIN_ODDS]}&draw={row.iloc[COL_DRAW_ODDS]}&lose={row.iloc[COL_LOSE_ODDS]}">배당 분석</a><br><br>
 
-<hr style="margin:18px 0;border-color:#334155">
+    <button onclick="history.back()">← 뒤로</button>
 
-<b>EV 분석</b><br>
-추천: <b>{ev_data["추천"]}</b><br>
-EV → 승 {ev_data["EV"]["승"]} /
-무 {ev_data["EV"]["무"]} /
-패 {ev_data["EV"]["패"]}
-
-</div>
-
-<br>
-
-<a href="/page3?team={home}&league={league}">
-<button>홈팀 분석</button>
-</a>
-
-<a href="/page3?team={away}&league={league}">
-<button>원정팀 분석</button>
-</a>
-
-<a href="/page4?win={win_odds:.2f}&draw={draw_odds:.2f}&lose={lose_odds:.2f}">
-<button>배당 분석</button>
-</a>
-
-<br><br>
-<a href="/"><button>← 경기목록</button></a>
-
-</body>
-</html>
-"""
+    </body>
+    </html>
+    """
 
 # =====================================================
-# Page3 - 팀 분석 (상단 고정 + 하단 접기)
+# Page3 - 팀 분석
 # =====================================================
 
 @app.get("/page3", response_class=HTMLResponse)
@@ -656,106 +649,45 @@ def page3(team:str, league:str=None):
     if df.empty:
         return "<h2>데이터 없음</h2>"
 
-    # 🔒 팀 전체 경기
     team_df = df[
-        (df.iloc[:, COL_HOME] == team) |
-        (df.iloc[:, COL_AWAY] == team)
+        (df.iloc[:, COL_HOME]==team) |
+        (df.iloc[:, COL_AWAY]==team)
     ]
 
-    if team_df.empty:
-        return "<h2>팀 데이터 없음</h2>"
+    all_dist = distribution(team_df)
 
-    # 🔒 상단 고정 조건: 유형 + 팀 + 홈원정 + 일반
-    base_cond = {
-        COL_TYPE: team_df.iloc[0][COL_TYPE],
-        COL_HOMEAWAY: team_df.iloc[0][COL_HOMEAWAY],
-        COL_GENERAL: team_df.iloc[0][COL_GENERAL]
-    }
+    if league:
+        league_df = team_df[team_df.iloc[:, COL_LEAGUE]==league]
+    else:
+        league_df = pd.DataFrame()
 
-    top_df = run_filter(team_df, base_cond)
-    top_dist = distribution(top_df)
-
-    # EV 계산용 기준 row
-    row = team_df.iloc[0]
-    ev_data = ev_ai(top_dist, row)
-
-    # 🔒 하단: 유형 + 팀 + 홈원정 (일반 제거)
-    bottom_cond = {
-        COL_TYPE: team_df.iloc[0][COL_TYPE],
-        COL_HOMEAWAY: team_df.iloc[0][COL_HOMEAWAY]
-    }
-
-    bottom_df = run_filter(team_df, bottom_cond)
-
-    # 일반값별 세로 나열
-    generals = sorted(bottom_df.iloc[:, COL_GENERAL].dropna().unique())
-
-    def block(title, dist):
-        return f"""
-        <div style="margin-bottom:10px">
-        총 {dist["총"]}경기<br>
-        승 {dist["wp"]}%<br>
-        무 {dist["dp"]}%<br>
-        패 {dist["lp"]}%
-        </div>
-        """
-
-    general_html = ""
-    for g in generals:
-        sub = bottom_df[bottom_df.iloc[:, COL_GENERAL] == g]
-        dist = distribution(sub)
-
-        general_html += f"""
-        <details style="margin-top:8px">
-            <summary>일반 = {g}</summary>
-            {block("", dist)}
-        </details>
-        """
+    league_dist = distribution(league_df)
 
     return f"""
-<html>
-<head>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<style>
-body{{background:#0f1720;color:white;font-family:Arial;padding:20px}}
-.card{{background:#1e293b;padding:18px;border-radius:16px;margin-top:18px}}
-.fixed{{position:sticky;top:0;background:#0f1720;padding-bottom:10px}}
-</style>
-</head>
-<body>
+    <html>
+    <body style="background:#0f1720;color:white;padding:20px;">
 
-<h3>{team} 팀 분석</h3>
+    <h2>{team} 팀 분석</h2>
 
-<div class="card fixed">
-<h4>상단 고정 분포 (유형+팀+홈원정+일반)</h4>
+    <h3>전체</h3>
+    승 {all_dist["wp"]}% {bar_html(all_dist["wp"],"win")}
+    무 {all_dist["dp"]}% {bar_html(all_dist["dp"],"draw")}
+    패 {all_dist["lp"]}% {bar_html(all_dist["lp"],"lose")}
 
-총 {top_dist["총"]}경기<br>
-승 {top_dist["wp"]}%<br>
-무 {top_dist["dp"]}%<br>
-패 {top_dist["lp"]}%<br><br>
+    <h3>리그</h3>
+    승 {league_dist["wp"]}% {bar_html(league_dist["wp"],"win")}
+    무 {league_dist["dp"]}% {bar_html(league_dist["dp"],"draw")}
+    패 {league_dist["lp"]}% {bar_html(league_dist["lp"],"lose")}
 
-<b>EV 분석</b><br>
-추천: {ev_data["추천"]}<br>
-EV → 승 {ev_data["EV"]["승"]} /
-무 {ev_data["EV"]["무"]} /
-패 {ev_data["EV"]["패"]}
+    <button onclick="history.back()">← 뒤로</button>
 
-</div>
+    </body>
+    </html>
+    """
 
-<div class="card">
-<h4>일반값별 분포 (유형+팀+홈원정)</h4>
-{general_html}
-</div>
-
-<br>
-<a href="/"><button>← 경기목록</button></a>
-
-</body>
-</html>
-"""
 
 # =====================================================
-# Page4 - 배당 분석 (완전일치 + 3열 비교 + 접기)
+# Page4 - 배당 분석 (문자열 완전일치 구조)
 # =====================================================
 
 @app.get("/page4", response_class=HTMLResponse)
@@ -765,135 +697,65 @@ def page4(win:str, draw:str, lose:str):
     if df.empty:
         return "<h2>데이터 없음</h2>"
 
-    # 🔒 문자열 완전일치 (오차 0)
-    win_str  = win
-    draw_str = draw
-    lose_str = lose
+    win_str  = str(win)
+    draw_str = str(draw)
+    lose_str = str(lose)
 
-    # =====================================================
-    # 1️⃣ 완전일치 (승/무/패 모두 동일)
-    # =====================================================
-
+    # 🔥 완전 문자열 일치
     exact_df = df[
         (df.iloc[:, COL_WIN_ODDS]  == win_str) &
         (df.iloc[:, COL_DRAW_ODDS] == draw_str) &
         (df.iloc[:, COL_LOSE_ODDS] == lose_str)
     ]
-
     exact_dist = distribution(exact_df)
 
-    # EV 계산 기준 row (없으면 0 처리)
-    if not exact_df.empty:
-        row = exact_df.iloc[0]
-        ev_exact = ev_ai(exact_dist, row)
-    else:
-        ev_exact = {"추천":"없음","EV":{"승":0,"무":0,"패":0}}
+    # 승 동일
+    win_df = df[df.iloc[:, COL_WIN_ODDS] == win_str]
+    win_dist = distribution(win_df)
 
-    # =====================================================
-    # 2️⃣ 승 / 무 / 패 단일 동일
-    # =====================================================
-
-    win_df  = df[df.iloc[:, COL_WIN_ODDS]  == win_str]
+    # 무 동일
     draw_df = df[df.iloc[:, COL_DRAW_ODDS] == draw_str]
-    lose_df = df[df.iloc[:, COL_LOSE_ODDS] == lose_str]
-
-    win_dist  = distribution(win_df)
     draw_dist = distribution(draw_df)
+
+    # 패 동일
+    lose_df = df[df.iloc[:, COL_LOSE_ODDS] == lose_str]
     lose_dist = distribution(lose_df)
 
     def block(title, dist):
         return f"""
-        <div style="margin-bottom:10px">
-        총 {dist["총"]}경기<br>
-        승 {dist["wp"]}% ({dist["승"]})<br>
-        무 {dist["dp"]}% ({dist["무"]})<br>
-        패 {dist["lp"]}% ({dist["패"]})
+        <div style="margin-bottom:22px;padding:16px;
+                    background:#1e293b;border-radius:14px;">
+            <h3>{title}</h3>
+            총 {dist["총"]}경기<br>
+            승 {dist["wp"]}% {bar_html(dist["wp"],"win")}
+            무 {dist["dp"]}% {bar_html(dist["dp"],"draw")}
+            패 {dist["lp"]}% {bar_html(dist["lp"],"lose")}
         </div>
         """
 
-    # 일반값별 세로 나열
-    def general_loop(df_block):
-
-        if df_block.empty:
-            return "<div>데이터 없음</div>"
-
-        html = ""
-        generals = sorted(df_block.iloc[:, COL_GENERAL].dropna().unique())
-
-        for g in generals:
-            sub = df_block[df_block.iloc[:, COL_GENERAL] == g]
-            dist = distribution(sub)
-
-            html += f"""
-            <details style="margin-top:6px">
-                <summary>일반 = {g}</summary>
-                {block("", dist)}
-            </details>
-            """
-
-        return html
-
     return f"""
-<html>
-<head>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<style>
-body{{background:#0f1720;color:white;font-family:Arial;padding:20px}}
-.card{{background:#1e293b;padding:18px;border-radius:16px;margin-top:18px}}
-.flex{{display:flex;gap:20px;flex-wrap:wrap}}
-.col{{flex:1;min-width:240px}}
-hr{{border-color:#334155}}
-</style>
-</head>
-<body>
+    <html>
+    <body style="background:#0f1720;color:white;padding:20px;">
 
-<h3>배당 분석</h3>
-승 {win_str} / 무 {draw_str} / 패 {lose_str}
+    <h2>배당 분석</h2>
+    승 {win_str} / 무 {draw_str} / 패 {lose_str}
 
-<!-- 카드1 : 완전일치 + EV -->
-<div class="card">
-<h4>완전일치 통계</h4>
-{block("", exact_dist)}
+    {block("완전일치 통계", exact_dist)}
+    {block("승배당 동일 통계", win_dist)}
+    {block("무배당 동일 통계", draw_dist)}
+    {block("패배당 동일 통계", lose_dist)}
 
-<hr>
+    <button onclick="history.back()">← 뒤로</button>
 
-<b>EV 분석</b><br>
-추천: {ev_exact["추천"]}<br>
-EV → 승 {ev_exact["EV"]["승"]} /
-무 {ev_exact["EV"]["무"]} /
-패 {ev_exact["EV"]["패"]}
-</div>
+    </body>
+    </html>
+    """
 
-<!-- 카드2 : 3열 비교 -->
-<div class="card">
-<h4>단일 배당 비교</h4>
 
-<div class="flex">
+# =====================================================
+# 로컬 실행
+# =====================================================
 
-<div class="col">
-<b>승배당 동일</b>
-{block("", win_dist)}
-{general_loop(win_df)}
-</div>
-
-<div class="col">
-<b>무배당 동일</b>
-{block("", draw_dist)}
-{general_loop(draw_df)}
-</div>
-
-<div class="col">
-<b>패배당 동일</b>
-{block("", lose_dist)}
-{general_loop(lose_df)}
-</div>
-
-</div>
-</div>
-
-<br>
-<a href="/"><button>← 경기목록</button></a>
-
-</body>
-</html>
-"""
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
