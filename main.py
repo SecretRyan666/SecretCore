@@ -32,10 +32,6 @@ DATA_FILE = "current_data.csv"
 CURRENT_DF = pd.DataFrame()
 LOGGED_IN = False
 
-# =====================================================
-# 🔥 코드테스트 기반 전역 추가
-# =====================================================
-
 FAVORITES = []
 LEDGER = []
 
@@ -97,10 +93,6 @@ def distribution(df):
     }
 
 
-# =====================================================
-# 🔥 AI 등급 삭제 반영 (코드테스트 근거)
-# =====================================================
-
 def ev_ai(dist, row):
 
     win_odds  = float(row.iloc[COL_WIN_ODDS])
@@ -140,6 +132,290 @@ def logout():
     LOGGED_IN = False
     return RedirectResponse("/", status_code=302)
 
+
+# =====================================================
+# 업로드 전용 페이지
+# =====================================================
+
+@app.get("/page-upload", response_class=HTMLResponse)
+def page_upload():
+
+    if not LOGGED_IN:
+        return RedirectResponse("/", status_code=302)
+
+    return """
+    <html>
+    <body style='background:#0f1720;color:white;padding:30px;font-family:Arial;'>
+    <h2>📤 업로드</h2>
+    <form action="/upload-data" method="post" enctype="multipart/form-data">
+        <input type="file" name="file" required><br><br>
+        <button type="submit">업로드 실행</button>
+    </form>
+    <br>
+    <button onclick="history.back()">← 뒤로</button>
+    </body>
+    </html>
+    """
+
+
+# =====================================================
+# Page1 - DarkPro 통합 UI
+# =====================================================
+
+@app.get("/", response_class=HTMLResponse)
+def home():
+
+    if not LOGGED_IN:
+        return """
+        <html>
+        <body style="background:#0f1720;color:white;font-family:Arial;display:flex;justify-content:center;align-items:center;height:100vh;">
+        <form action="/login" method="post">
+            <h2>Login</h2>
+            <input name="username" placeholder="ID"><br><br>
+            <input name="password" type="password" placeholder="PW"><br><br>
+            <button type="submit">로그인</button>
+        </form>
+        </body>
+        </html>
+        """
+
+    return """
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+
+body{
+background:#0f1720;
+color:white;
+font-family:Arial;
+margin:0;
+}
+
+.header{
+display:flex;
+justify-content:space-between;
+align-items:center;
+padding:14px 18px;
+background:rgba(17,24,39,0.95);
+backdrop-filter:blur(12px);
+position:sticky;
+top:0;
+z-index:10;
+}
+
+.logo{
+font-weight:700;
+font-size:18px;
+}
+
+.top-icons{
+display:flex;
+gap:16px;
+font-size:18px;
+cursor:pointer;
+}
+
+.condition-bar{
+padding:8px 16px;
+font-size:12px;
+opacity:0.7;
+border-bottom:1px solid rgba(255,255,255,0.05);
+}
+
+.card{
+background:linear-gradient(145deg,#1e293b,#111827);
+margin:14px;
+padding:18px;
+border-radius:18px;
+position:relative;
+box-shadow:0 10px 30px rgba(0,0,0,0.4);
+}
+
+.league{
+color:#38bdf8;
+font-weight:600;
+font-size:13px;
+}
+
+.match{
+margin-top:4px;
+margin-bottom:6px;
+}
+
+.secret{
+position:absolute;
+left:14px;
+top:14px;
+background:#22c55e;
+color:#0f1720;
+font-size:11px;
+padding:3px 8px;
+border-radius:999px;
+font-weight:700;
+}
+
+.info-btn{
+position:absolute;
+right:40px;
+top:14px;
+cursor:pointer;
+}
+
+.star-btn{
+position:absolute;
+right:14px;
+top:14px;
+cursor:pointer;
+}
+
+.bottom-nav{
+position:fixed;
+bottom:0;
+width:100%;
+background:#111827;
+display:flex;
+justify-content:space-around;
+padding:12px 0;
+font-size:20px;
+}
+
+.modal{
+display:none;
+position:fixed;
+bottom:0;
+width:100%;
+background:#1e293b;
+padding:20px;
+border-radius:20px 20px 0 0;
+}
+
+select{
+width:100%;
+margin-bottom:10px;
+padding:8px;
+background:#0f1720;
+color:white;
+border:none;
+border-radius:8px;
+}
+
+button{
+padding:6px 12px;
+border-radius:8px;
+border:none;
+cursor:pointer;
+}
+
+</style>
+</head>
+<body>
+
+<div class="header">
+    <div class="logo">SecretCore</div>
+    <div class="top-icons">
+        <div onclick="openFilter()">⚙️</div>
+        <div onclick="resetFilter()">🔄</div>
+        <div onclick="location.href='/page-upload'">📤</div>
+        <div onclick="location.href='/logout'">👤</div>
+    </div>
+</div>
+
+<div class="condition-bar" id="conditionBar">
+경기전 · 일반/핸디1
+</div>
+
+<div id="list" style="padding-bottom:100px;"></div>
+
+<div class="bottom-nav">
+    <a href="/ledger">🏠</a>
+    <a href="/memo">🌍</a>
+    <a href="/capture">📸</a>
+    <a href="/favorites">📰</a>
+</div>
+
+<div class="modal" id="filterModal">
+    <h3>페이지필터</h3>
+    <select id="typeSelect"></select>
+    <select id="homeawaySelect"></select>
+    <select id="generalSelect"></select>
+    <select id="dirSelect"></select>
+    <select id="handiSelect"></select>
+    <button onclick="applyFilter()">적용</button>
+</div>
+
+<script>
+
+let filters = JSON.parse(localStorage.getItem("filters")||"{}");
+
+function openFilter(){
+    document.getElementById("filterModal").style.display="block";
+}
+
+function resetFilter(){
+    filters = {};
+    localStorage.setItem("filters","{}");
+    load();
+}
+
+function applyFilter(){
+    filters.type = document.getElementById("typeSelect").value;
+    filters.homeaway = document.getElementById("homeawaySelect").value;
+    filters.general = document.getElementById("generalSelect").value;
+    filters.dir = document.getElementById("dirSelect").value;
+    filters.handi = document.getElementById("handiSelect").value;
+    localStorage.setItem("filters",JSON.stringify(filters));
+    document.getElementById("filterModal").style.display="none";
+    load();
+}
+
+async function load(){
+
+    let query = new URLSearchParams(filters).toString();
+    let r = await fetch('/matches?'+query);
+    let data = await r.json();
+
+    let html="";
+
+    data.forEach(function(m){
+
+        let secret = Math.random() > 0.8 ? "<div class='secret'>SECRET</div>" : "";
+
+        html += `
+        <div class="card">
+            ${secret}
+            <div class="league">${m[5]}</div>
+            <div class="match"><b>${m[6]}</b> vs <b>${m[7]}</b></div>
+            <div>승 ${Number(m[8]).toFixed(2)} | 무 ${Number(m[9]).toFixed(2)} | 패 ${Number(m[10]).toFixed(2)}</div>
+            <div class="info-btn" onclick="goDetail(${m[1]},${m[3]})">ℹ️</div>
+            <div class="star-btn" onclick="toggleFav('${m[6]}','${m[7]}')">⭐</div>
+        </div>
+        `;
+    });
+
+    document.getElementById("list").innerHTML = html;
+}
+
+function goDetail(year,match){
+    location.href = "/detail?year="+year+"&match="+match;
+}
+
+async function toggleFav(home,away){
+    await fetch("/fav-toggle",{
+        method:"POST",
+        headers:{"Content-Type":"application/x-www-form-urlencoded"},
+        body:`home=${home}&away=${away}`
+    });
+}
+
+load();
+
+</script>
+
+</body>
+</html>
+"""
+
 # =====================================================
 # 업로드
 # =====================================================
@@ -166,74 +442,6 @@ def upload(file: UploadFile = File(...)):
 
     return RedirectResponse("/", status_code=302)
 
-# =====================================================
-# Page1 UI
-# =====================================================
-
-@app.get("/", response_class=HTMLResponse)
-def home():
-
-    if LOGGED_IN:
-        login_area = """
-        <form id="uploadForm" action="/upload-data" method="post" enctype="multipart/form-data" style="display:inline-flex;gap:6px;align-items:center;">
-            <input type="file" name="file" required style="font-size:12px;">
-            <button type="submit">📤</button>
-        </form>
-        <a href="/logout"><button>👤</button></a>
-        """
-    else:
-        login_area = """
-        <form action="/login" method="post" style="display:inline-flex;gap:6px;">
-            <input name="username" placeholder="ID" style="width:70px;">
-            <input name="password" type="password" placeholder="PW" style="width:70px;">
-            <button type="submit">👤</button>
-        </form>
-        """
-
-    return """
-<html>
-<head>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-</head>
-<body style="background:#0f1720;color:white;font-family:Arial;margin:0;">
-
-<div style="display:flex;justify-content:space-between;align-items:center;padding:15px;background:#111827;">
-    <div style="font-weight:700;">SecretCore PRO</div>
-    <div>""" + login_area + """</div>
-</div>
-
-<div id="list" style="padding:15px;padding-bottom:90px;"></div>
-
-<div style="position:fixed;bottom:0;width:100%;background:#111827;display:flex;justify-content:space-around;padding:12px 0;">
-    <a href="/ledger" style="color:white;text-decoration:none;">🏠</a>
-    <a href="/memo" style="color:white;text-decoration:none;">🌍</a>
-    <a href="/capture" style="color:white;text-decoration:none;">📸</a>
-    <a href="/favorites" style="color:white;text-decoration:none;">📰</a>
-</div>
-
-<script>
-async function load(){
-    let r = await fetch('/matches');
-    let data = await r.json();
-    let html="";
-
-    data.forEach(function(m){
-        html +=
-        "<div style='background:#1e293b;margin-bottom:12px;padding:15px;border-radius:14px;'>"+
-        "<div style='font-weight:600;color:#38bdf8;'>"+m[5]+"</div>"+
-        "<div><b>"+m[6]+"</b> vs <b>"+m[7]+"</b></div>"+
-        "<div>승 "+Number(m[8]).toFixed(2)+" | 무 "+Number(m[9]).toFixed(2)+" | 패 "+Number(m[10]).toFixed(2)+"</div>"+
-        "</div>";
-    });
-
-    document.getElementById("list").innerHTML = html;
-}
-load();
-</script>
-
-</body>
-</html>
-"""
 
 # =====================================================
 # 필터 고유값 API
@@ -263,16 +471,16 @@ def filters():
 
 
 # =====================================================
-# 경기목록 API
+# 경기목록 API (경기전 + 일반/핸디1 기본고정)
 # =====================================================
 
 @app.get("/matches")
 def matches(
-    filter_type: str = None,
-    filter_homeaway: str = None,
-    filter_general: str = None,
-    filter_dir: str = None,
-    filter_handi: str = None
+    type: str = None,
+    homeaway: str = None,
+    general: str = None,
+    dir: str = None,
+    handi: str = None
 ):
 
     df = CURRENT_DF
@@ -280,7 +488,7 @@ def matches(
     if df.empty:
         return []
 
-    # 기본조건: 경기전 + 일반/핸디1
+    # 기본조건
     base_df = df[
         (df.iloc[:, COL_RESULT] == "경기전") &
         (
@@ -291,372 +499,20 @@ def matches(
 
     conditions = {}
 
-    if filter_type:
-        conditions[COL_TYPE] = filter_type
-    if filter_homeaway:
-        conditions[COL_HOMEAWAY] = filter_homeaway
-    if filter_general:
-        conditions[COL_GENERAL] = filter_general
-    if filter_dir:
-        conditions[COL_DIR] = filter_dir
-    if filter_handi:
-        conditions[COL_HANDI] = filter_handi
+    if type:
+        conditions[COL_TYPE] = type
+    if homeaway:
+        conditions[COL_HOMEAWAY] = homeaway
+    if general:
+        conditions[COL_GENERAL] = general
+    if dir:
+        conditions[COL_DIR] = dir
+    if handi:
+        conditions[COL_HANDI] = handi
 
     filtered = run_filter(base_df, conditions)
 
     return filtered.values.tolist()
-
-
-# =====================================================
-# PRO 막대그래프 (3색)
-# =====================================================
-
-def bar_html(percent, mode="win"):
-
-    color_map = {
-        "win":"linear-gradient(90deg,#22c55e,#16a34a)",
-        "draw":"linear-gradient(90deg,#94a3b8,#64748b)",
-        "lose":"linear-gradient(90deg,#ef4444,#dc2626)"
-    }
-
-    return f"""
-    <div class="bar-wrap">
-        <div class="bar-inner" style="width:{percent}%;background:{color_map[mode]};"></div>
-    </div>
-    """
-
-
-# =====================================================
-# Page2 - 상세 대시보드 (AI 등급 삭제 반영)
-# =====================================================
-
-@app.get("/detail", response_class=HTMLResponse)
-def detail(year:int, match:int):
-
-    df = CURRENT_DF
-
-    if df.empty:
-        return "<h2>데이터 없음</h2>"
-
-    row_df = df[
-        (df.iloc[:, COL_YEAR]==year) &
-        (df.iloc[:, COL_MATCH]==match)
-    ]
-
-    if row_df.empty:
-        return "<h2>경기 없음</h2>"
-
-    row = row_df.iloc[0]
-
-    league = row.iloc[COL_LEAGUE]
-    home   = row.iloc[COL_HOME]
-    away   = row.iloc[COL_AWAY]
-
-    win_odds  = float(row.iloc[COL_WIN_ODDS])
-    draw_odds = float(row.iloc[COL_DRAW_ODDS])
-    lose_odds = float(row.iloc[COL_LOSE_ODDS])
-
-    cond_label = f"{row.iloc[COL_TYPE]} · {row.iloc[COL_HOMEAWAY]} · {row.iloc[COL_GENERAL]} · {row.iloc[COL_DIR]} · {row.iloc[COL_HANDI]}"
-
-    base_cond = {
-        COL_TYPE:row.iloc[COL_TYPE],
-        COL_HOMEAWAY:row.iloc[COL_HOMEAWAY],
-        COL_GENERAL:row.iloc[COL_GENERAL],
-        COL_DIR:row.iloc[COL_DIR],
-        COL_HANDI:row.iloc[COL_HANDI]
-    }
-
-    base_df = run_filter(df, base_cond)
-    base_dist = distribution(base_df)
-
-    league_cond = base_cond.copy()
-    league_cond[COL_LEAGUE] = league
-    league_df = run_filter(df, league_cond)
-    league_dist = distribution(league_df)
-
-    ev_data = ev_ai(base_dist,row)
-
-    return f"""
-<html>
-<head>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<style>
-
-body{{
-background:linear-gradient(135deg,#0f1720,#1e293b);
-color:white;
-font-family:Arial;
-padding:20px;
-}}
-
-.summary-card{{
-background:linear-gradient(135deg,#1e293b,#0f1720);
-padding:20px;
-border-radius:22px;
-box-shadow:0 10px 40px rgba(0,0,0,0.5);
-margin-bottom:20px;
-}}
-
-.card{{
-background:rgba(30,41,59,0.9);
-padding:20px;
-border-radius:20px;
-margin-bottom:18px;
-box-shadow:0 8px 30px rgba(0,0,0,0.4);
-}}
-
-.flex{{
-display:flex;
-gap:20px;
-flex-wrap:wrap;
-}}
-
-.col{{
-flex:1;
-min-width:260px;
-}}
-
-.bar-wrap{{
-width:100%;
-background:rgba(255,255,255,0.08);
-border-radius:999px;
-overflow:hidden;
-height:16px;
-margin:8px 0 14px 0;
-}}
-
-.bar-inner{{
-height:100%;
-border-radius:999px;
-transition:width 0.4s ease;
-}}
-
-button{{
-margin-top:12px;
-padding:6px 12px;
-border-radius:8px;
-}}
-
-</style>
-</head>
-<body>
-
-<div class="summary-card">
-<h3>[{league}] {home} vs {away}</h3>
-{cond_label}<br>
-승 {win_odds:.2f} / 무 {draw_odds:.2f} / 패 {lose_odds:.2f}
-<br><br>
-<b>추천: {ev_data["추천"]}</b>
-</div>
-
-<div class="card">
-<h4>5조건 완전일치</h4>
-총 {base_dist["총"]}경기<br>
-승 {base_dist["wp"]}%{bar_html(base_dist["wp"],"win")}
-무 {base_dist["dp"]}%{bar_html(base_dist["dp"],"draw")}
-패 {base_dist["lp"]}%{bar_html(base_dist["lp"],"lose")}
-</div>
-
-<div class="flex">
-<div class="col">
-<div class="card">
-<h4>모든리그</h4>
-총 {base_dist["총"]}경기<br>
-승 {base_dist["wp"]}%{bar_html(base_dist["wp"],"win")}
-무 {base_dist["dp"]}%{bar_html(base_dist["dp"],"draw")}
-패 {base_dist["lp"]}%{bar_html(base_dist["lp"],"lose")}
-</div>
-</div>
-
-<div class="col">
-<div class="card">
-<h4>{league}</h4>
-총 {league_dist["총"]}경기<br>
-승 {league_dist["wp"]}%{bar_html(league_dist["wp"],"win")}
-무 {league_dist["dp"]}%{bar_html(league_dist["dp"],"draw")}
-패 {league_dist["lp"]}%{bar_html(league_dist["lp"],"lose")}
-</div>
-</div>
-</div>
-
-<a href="/page3?team={home}&league={league}"><button>홈팀 분석</button></a>
-<a href="/page3?team={away}&league={league}"><button>원정팀 분석</button></a>
-<a href="/page4?win={win_odds}&draw={draw_odds}&lose={lose_odds}"><button>배당 분석</button></a>
-
-<br><br>
-<a href="/"><button>← 경기목록</button></a>
-
-</body>
-</html>
-"""
-
-# =====================================================
-# Page3 - 팀 분석 (AI등급 없음)
-# =====================================================
-
-@app.get("/page3", response_class=HTMLResponse)
-def page3(team:str, league:str=None):
-
-    df = CURRENT_DF
-
-    if df.empty:
-        return "<h2>데이터 없음</h2>"
-
-    team_df = df[
-        (df.iloc[:, COL_HOME]==team) |
-        (df.iloc[:, COL_AWAY]==team)
-    ]
-
-    all_dist = distribution(team_df)
-
-    if league:
-        league_df = team_df[team_df.iloc[:, COL_LEAGUE]==league]
-    else:
-        league_df = pd.DataFrame()
-
-    league_dist = distribution(league_df)
-
-    home_df = team_df[team_df.iloc[:, COL_HOME]==team]
-    away_df = team_df[team_df.iloc[:, COL_AWAY]==team]
-
-    home_dist = distribution(home_df)
-    away_dist = distribution(away_df)
-
-    def block(title, dist):
-        return f"""
-        <div class="card">
-        <h4>{title}</h4>
-        총 {dist["총"]}경기<br>
-        승 {dist["wp"]}%{bar_html(dist["wp"],"win")}
-        무 {dist["dp"]}%{bar_html(dist["dp"],"draw")}
-        패 {dist["lp"]}%{bar_html(dist["lp"],"lose")}
-        </div>
-        """
-
-    return f"""
-<html>
-<head>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<style>
-
-body{{
-background:linear-gradient(135deg,#0f1720,#1e293b);
-color:white;
-font-family:Arial;
-padding:20px;
-}}
-
-.card{{
-background:rgba(30,41,59,0.9);
-padding:20px;
-border-radius:20px;
-margin-bottom:18px;
-}}
-
-.flex{{
-display:flex;
-gap:20px;
-flex-wrap:wrap;
-}}
-
-.col{{
-flex:1;
-min-width:260px;
-}}
-
-.bar-wrap{{
-width:100%;
-background:rgba(255,255,255,0.08);
-border-radius:999px;
-overflow:hidden;
-height:16px;
-margin:8px 0 14px 0;
-}}
-
-.bar-inner{{
-height:100%;
-border-radius:999px;
-}}
-
-button{{margin-top:12px;padding:6px 12px;border-radius:8px}}
-
-</style>
-</head>
-<body>
-
-<h3>{team} 팀 분석</h3>
-
-<div class="flex">
-<div class="col">
-{block(team+" | 모든리그", all_dist)}
-</div>
-<div class="col">
-{block(team+" | "+(league if league else "리그없음"), league_dist)}
-</div>
-</div>
-
-<div class="flex">
-<div class="col">
-{block(team+" | 홈경기", home_dist)}
-</div>
-<div class="col">
-{block(team+" | 원정경기", away_dist)}
-</div>
-</div>
-
-<button onclick="history.back()">← 뒤로</button>
-
-</body>
-</html>
-"""
-
-
-# =====================================================
-# Page4 - 배당 분석
-# =====================================================
-
-@app.get("/page4", response_class=HTMLResponse)
-def page4(win:float, draw:float, lose:float):
-
-    df = CURRENT_DF
-
-    if df.empty:
-        return "<h2>데이터 없음</h2>"
-
-    win  = round(float(win),2)
-    draw = round(float(draw),2)
-    lose = round(float(lose),2)
-
-    win_series  = pd.to_numeric(df.iloc[:, COL_WIN_ODDS],  errors="coerce").fillna(0).round(2)
-    draw_series = pd.to_numeric(df.iloc[:, COL_DRAW_ODDS], errors="coerce").fillna(0).round(2)
-    lose_series = pd.to_numeric(df.iloc[:, COL_LOSE_ODDS], errors="coerce").fillna(0).round(2)
-
-    exact_df = df[
-        (win_series==win) &
-        (draw_series==draw) &
-        (lose_series==lose)
-    ]
-    exact_dist = distribution(exact_df)
-
-    return f"""
-<html>
-<body style="background:#0f1720;color:white;padding:20px;font-family:Arial;">
-
-<h3>배당 분석</h3>
-승 {win:.2f} / 무 {draw:.2f} / 패 {lose:.2f}
-
-<div>
-총 {exact_dist["총"]}경기<br>
-승 {exact_dist["wp"]}%<br>
-무 {exact_dist["dp"]}%<br>
-패 {exact_dist["lp"]}%
-</div>
-
-<button onclick="history.back()">← 뒤로</button>
-
-</body>
-</html>
-"""
 
 
 # =====================================================
@@ -752,6 +608,7 @@ def capture():
     </html>
     """
 
+
 # =====================================================
 # Health Check
 # =====================================================
@@ -763,9 +620,201 @@ def health():
         "rows": len(CURRENT_DF)
     }
 
+# =====================================================
+# PRO 막대그래프
+# =====================================================
+
+def bar_html(percent, mode="win"):
+
+    color_map = {
+        "win":"linear-gradient(90deg,#22c55e,#16a34a)",
+        "draw":"linear-gradient(90deg,#94a3b8,#64748b)",
+        "lose":"linear-gradient(90deg,#ef4444,#dc2626)"
+    }
+
+    return f"""
+    <div style="width:100%;background:rgba(255,255,255,0.08);
+                border-radius:999px;height:14px;margin:6px 0;">
+        <div style="width:{percent}%;background:{color_map[mode]};
+                    height:100%;border-radius:999px;"></div>
+    </div>
+    """
+
 
 # =====================================================
-# 로컬 실행용
+# Page2 - 상세
+# =====================================================
+
+@app.get("/detail", response_class=HTMLResponse)
+def detail(year:int, match:int):
+
+    df = CURRENT_DF
+    if df.empty:
+        return "<h2>데이터 없음</h2>"
+
+    row_df = df[
+        (df.iloc[:, COL_YEAR]==year) &
+        (df.iloc[:, COL_MATCH]==match)
+    ]
+
+    if row_df.empty:
+        return "<h2>경기 없음</h2>"
+
+    row = row_df.iloc[0]
+
+    league = row.iloc[COL_LEAGUE]
+    home   = row.iloc[COL_HOME]
+    away   = row.iloc[COL_AWAY]
+
+    win_odds  = float(row.iloc[COL_WIN_ODDS])
+    draw_odds = float(row.iloc[COL_DRAW_ODDS])
+    lose_odds = float(row.iloc[COL_LOSE_ODDS])
+
+    base_cond = {
+        COL_TYPE:row.iloc[COL_TYPE],
+        COL_HOMEAWAY:row.iloc[COL_HOMEAWAY],
+        COL_GENERAL:row.iloc[COL_GENERAL],
+        COL_DIR:row.iloc[COL_DIR],
+        COL_HANDI:row.iloc[COL_HANDI]
+    }
+
+    base_df = run_filter(df, base_cond)
+    base_dist = distribution(base_df)
+
+    league_cond = base_cond.copy()
+    league_cond[COL_LEAGUE] = league
+    league_df = run_filter(df, league_cond)
+    league_dist = distribution(league_df)
+
+    ev_data = ev_ai(base_dist,row)
+
+    return f"""
+    <html>
+    <body style="background:#0f1720;color:white;font-family:Arial;padding:20px;">
+
+    <h2>[{league}] {home} vs {away}</h2>
+    승 {win_odds:.2f} / 무 {draw_odds:.2f} / 패 {lose_odds:.2f}
+    <br><br>
+    <b>추천: {ev_data["추천"]}</b>
+
+    <h3>5조건 완전일치</h3>
+    승 {base_dist["wp"]}% {bar_html(base_dist["wp"],"win")}
+    무 {base_dist["dp"]}% {bar_html(base_dist["dp"],"draw")}
+    패 {base_dist["lp"]}% {bar_html(base_dist["lp"],"lose")}
+
+    <h3>리그 통계</h3>
+    승 {league_dist["wp"]}% {bar_html(league_dist["wp"],"win")}
+    무 {league_dist["dp"]}% {bar_html(league_dist["dp"],"draw")}
+    패 {league_dist["lp"]}% {bar_html(league_dist["lp"],"lose")}
+
+    <br>
+    <a href="/page3?team={home}&league={league}">홈팀 분석</a><br>
+    <a href="/page3?team={away}&league={league}">원정팀 분석</a><br>
+    <a href="/page4?win={win_odds}&draw={draw_odds}&lose={lose_odds}">배당 분석</a><br><br>
+
+    <button onclick="history.back()">← 뒤로</button>
+
+    </body>
+    </html>
+    """
+
+
+# =====================================================
+# Page3
+# =====================================================
+
+@app.get("/page3", response_class=HTMLResponse)
+def page3(team:str, league:str=None):
+
+    df = CURRENT_DF
+    if df.empty:
+        return "<h2>데이터 없음</h2>"
+
+    team_df = df[
+        (df.iloc[:, COL_HOME]==team) |
+        (df.iloc[:, COL_AWAY]==team)
+    ]
+
+    all_dist = distribution(team_df)
+
+    if league:
+        league_df = team_df[team_df.iloc[:, COL_LEAGUE]==league]
+    else:
+        league_df = pd.DataFrame()
+
+    league_dist = distribution(league_df)
+
+    return f"""
+    <html>
+    <body style="background:#0f1720;color:white;padding:20px;">
+
+    <h2>{team} 팀 분석</h2>
+
+    <h3>전체</h3>
+    승 {all_dist["wp"]}% {bar_html(all_dist["wp"],"win")}
+    무 {all_dist["dp"]}% {bar_html(all_dist["dp"],"draw")}
+    패 {all_dist["lp"]}% {bar_html(all_dist["lp"],"lose")}
+
+    <h3>리그</h3>
+    승 {league_dist["wp"]}% {bar_html(league_dist["wp"],"win")}
+    무 {league_dist["dp"]}% {bar_html(league_dist["dp"],"draw")}
+    패 {league_dist["lp"]}% {bar_html(league_dist["lp"],"lose")}
+
+    <button onclick="history.back()">← 뒤로</button>
+
+    </body>
+    </html>
+    """
+
+
+# =====================================================
+# Page4
+# =====================================================
+
+@app.get("/page4", response_class=HTMLResponse)
+def page4(win:float, draw:float, lose:float):
+
+    df = CURRENT_DF
+    if df.empty:
+        return "<h2>데이터 없음</h2>"
+
+    win  = round(float(win),2)
+    draw = round(float(draw),2)
+    lose = round(float(lose),2)
+
+    win_series  = pd.to_numeric(df.iloc[:, COL_WIN_ODDS], errors="coerce").fillna(0).round(2)
+    draw_series = pd.to_numeric(df.iloc[:, COL_DRAW_ODDS], errors="coerce").fillna(0).round(2)
+    lose_series = pd.to_numeric(df.iloc[:, COL_LOSE_ODDS], errors="coerce").fillna(0).round(2)
+
+    exact_df = df[
+        (win_series==win) &
+        (draw_series==draw) &
+        (lose_series==lose)
+    ]
+
+    exact_dist = distribution(exact_df)
+
+    return f"""
+    <html>
+    <body style="background:#0f1720;color:white;padding:20px;">
+
+    <h2>배당 분석</h2>
+    승 {win:.2f} / 무 {draw:.2f} / 패 {lose:.2f}
+
+    <h3>완전일치 통계</h3>
+    승 {exact_dist["wp"]}%<br>
+    무 {exact_dist["dp"]}%<br>
+    패 {exact_dist["lp"]}%<br>
+
+    <button onclick="history.back()">← 뒤로</button>
+
+    </body>
+    </html>
+    """
+
+
+# =====================================================
+# 로컬 실행
 # =====================================================
 
 if __name__ == "__main__":
