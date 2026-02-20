@@ -132,24 +132,23 @@ def distribution(df):
     DIST_CACHE[key] = result
     return result
 
-
 # =====================================================
 # 안전 EV
 # =====================================================
 
-def safe_ev(dist,row):
+def safe_ev(dist, row):
     try:
         win_odds  = float(row.iloc[COL_WIN_ODDS])
         draw_odds = float(row.iloc[COL_DRAW_ODDS])
         lose_odds = float(row.iloc[COL_LOSE_ODDS])
     except:
-        return {"EV":{"승":0,"무":0,"패":0},"추천":"없음"}
+        return {"EV": {"승":0,"무":0,"패":0}, "추천":"없음"}
 
-    ev_w = dist["wp"]/100*win_odds - 1
-    ev_d = dist["dp"]/100*draw_odds - 1
-    ev_l = dist["lp"]/100*lose_odds - 1
+    ev_w = dist["wp"]/100 * win_odds  - 1
+    ev_d = dist["dp"]/100 * draw_odds - 1
+    ev_l = dist["lp"]/100 * lose_odds - 1
 
-    ev_map = {"승":ev_w,"무":ev_d,"패":ev_l}
+    ev_map = {"승":ev_w, "무":ev_d, "패":ev_l}
     best = max(ev_map, key=ev_map.get)
 
     return {
@@ -160,7 +159,6 @@ def safe_ev(dist,row):
         },
         "추천":best
     }
-
 
 # =====================================================
 # SECRET 점수
@@ -175,7 +173,7 @@ def secret_score(row, df):
     if dist["총"] < 10:
         return {"score":0,"sample":dist["총"],"추천":"없음"}
 
-    ev_data = safe_ev(dist,row)
+    ev_data = safe_ev(dist, row)
     best_ev = max(ev_data["EV"].values())
 
     return {
@@ -183,7 +181,6 @@ def secret_score(row, df):
         "sample":dist["총"],
         "추천":ev_data["추천"]
     }
-
 
 # =====================================================
 # 로그인
@@ -202,7 +199,6 @@ def logout():
     global LOGGED_IN
     LOGGED_IN = False
     return RedirectResponse("/", status_code=302)
-
 
 # =====================================================
 # 업로드 페이지
@@ -228,7 +224,6 @@ def page_upload():
     </html>
     """
 
-
 # =====================================================
 # 업로드 처리 (dtype=str 유지 + 컬럼검증 + 캐시초기화)
 # =====================================================
@@ -245,9 +240,7 @@ def upload(file: UploadFile = File(...)):
     )
 
     if df.shape[1] != EXPECTED_COLS:
-        return {
-            "error": f"컬럼 불일치: {df.shape[1]} / 기대값 {EXPECTED_COLS}"
-        }
+        return {"error": f"컬럼 불일치: {df.shape[1]} / 기대값 {EXPECTED_COLS}"}
 
     df.to_csv(DATA_FILE, index=False, encoding="utf-8-sig")
 
@@ -283,20 +276,16 @@ def self_check():
 
     return report
 
-
 # =====================================================
 # Health Check
 # =====================================================
 
 @app.get("/health")
 def health():
-    return {
-        "self_check": self_check()
-    }
-
+    return {"self_check": self_check()}
 
 # =====================================================
-# Page1 - 메인 (COL_NO 기준 링크)
+# Page1 - 메인 (PRO UI + COL_NO 단일키)
 # =====================================================
 
 @app.get("/", response_class=HTMLResponse)
@@ -322,15 +311,89 @@ def home():
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-</head>
-<body style="background:#0f1720;color:white;font-family:Arial;">
+<style>
+body{
+background:#0f1720;
+color:white;
+font-family:Arial;
+margin:0;
+}
 
-<div style="padding:16px;background:#111827;">
-<b>SecretCore PRO</b>
-<span style="float:right;">
-<a href="/page-upload" style="color:white;margin-right:10px;">📤</a>
-<a href="/logout" style="color:white;">👤</a>
-</span>
+.header{
+display:flex;
+justify-content:space-between;
+align-items:center;
+padding:14px 18px;
+background:#111827;
+position:sticky;
+top:0;
+z-index:50;
+}
+
+.logo{
+font-weight:700;
+font-size:18px;
+color:#38bdf8;
+}
+
+.top-icons{
+display:flex;
+gap:18px;
+font-size:18px;
+}
+
+.card{
+background:#1e293b;
+margin:14px;
+padding:18px;
+border-radius:18px;
+position:relative;
+box-shadow:0 4px 12px rgba(0,0,0,0.3);
+}
+
+.info-btn{
+position:absolute;
+right:14px;
+top:12px;
+font-size:12px;
+cursor:pointer;
+}
+
+.star-btn{
+position:absolute;
+right:14px;
+top:40px;
+font-size:18px;
+cursor:pointer;
+color:#6b7280;
+}
+
+.star-active{
+color:#facc15;
+}
+
+.bottom-nav{
+position:fixed;
+bottom:0;
+width:100%;
+background:#111827;
+display:flex;
+justify-content:space-around;
+padding:12px 0;
+font-size:20px;
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+    <div class="logo">SecretCore PRO</div>
+    <div class="top-icons">
+        <div onclick="location.reload()">🔄</div>
+        <div>🔍</div>
+        <div onclick="location.href='/page-upload'">📤</div>
+        <div onclick="location.href='/logout'">👤</div>
+    </div>
 </div>
 
 <div id="conditionBar" style="
@@ -343,7 +406,30 @@ border-bottom:1px solid #1e293b;">
 
 <div id="list" style="padding-bottom:100px;"></div>
 
+<div class="bottom-nav">
+    <a href="/ledger">🏠</a>
+    <a href="/memo">📝</a>
+    <a href="/capture">📸</a>
+    <a href="/favorites">⭐</a>
+</div>
+
 <script>
+
+async function toggleFav(home,away,el){
+    let res = await fetch("/fav-toggle",{
+        method:"POST",
+        headers:{"Content-Type":"application/x-www-form-urlencoded"},
+        body:`home=${home}&away=${away}`
+    });
+
+    let data = await res.json();
+
+    if(data.status=="added"){
+        el.classList.add("star-active");
+    }else{
+        el.classList.remove("star-active");
+    }
+}
 
 async function load(){
 
@@ -355,21 +441,24 @@ async function load(){
     data.forEach(function(m){
 
         let row = m.row;
-        let badge = m.secret ? 
-        "<div style='color:#22c55e;font-weight:bold;'>SECRET</div>" : "";
+        let badge = m.secret ?
+        "<div style='color:#22c55e;font-weight:bold;margin-bottom:6px;'>SECRET</div>" : "";
 
         html+=`
-        <div style='background:#1e293b;padding:16px;margin:12px;border-radius:12px;'>
+        <div class="card">
         ${badge}
-        <b>${row[6]}</b> vs <b>${row[7]}</b><br>
-        승 ${row[8]} | 무 ${row[9]} | 패 ${row[10]}<br>
-        ${row[14]} · ${row[16]} · ${row[11]} · ${row[15]} · ${row[12]}<br>
-        <a href="/detail?no=${row[0]}" 
-        style="color:#38bdf8;">정보</a>
-        </div>`;
+        <div><b>${row[6]}</b> vs <b>${row[7]}</b></div>
+        <div>승 ${row[8]} | 무 ${row[9]} | 패 ${row[10]}</div>
+        <div>${row[14]} · ${row[16]} · ${row[11]} · ${row[15]} · ${row[12]}</div>
+        <div class="info-btn">
+            <a href="/detail?no=${row[0]}" style="color:#38bdf8;">정보</a>
+        </div>
+        <div class="star-btn" onclick="toggleFav('${row[6]}','${row[7]}',this)">★</div>
+        </div>
+        `;
     });
 
-    document.getElementById("list").innerHTML=html;
+    document.getElementById("list").innerHTML = html;
 }
 
 load();
@@ -380,9 +469,8 @@ load();
 </html>
 """
 
-
 # =====================================================
-# 경기목록 API (기본조건 + SECRET + NO 유지)
+# 경기목록 API (기본조건 + SECRET)
 # =====================================================
 
 @app.get("/matches")
@@ -504,7 +592,7 @@ def detail(no: str = None):
 
 
 # =====================================================
-# Page3 - 팀 분석 (COL_NO 기준 → 동일 row 사용)
+# Page3 - 팀 분석 (COL_NO 기반)
 # =====================================================
 
 @app.get("/page3", response_class=HTMLResponse)
@@ -568,7 +656,7 @@ def page3(no: str = None):
 
 
 # =====================================================
-# Page4 - 배당 분석 (COL_NO 기준 → 배당값 직접 참조)
+# Page4 - 배당 분석 (COL_NO 기반)
 # =====================================================
 
 @app.get("/page4", response_class=HTMLResponse)
@@ -597,6 +685,7 @@ def page4(no: str = None):
         (df.iloc[:, COL_DRAW_ODDS] == draw_str) &
         (df.iloc[:, COL_LOSE_ODDS] == lose_str)
     ]
+
     exact_dist = distribution(exact_df)
 
     return f"""
@@ -629,26 +718,37 @@ def page4(no: str = None):
 def fav_toggle(home:str = Form(...), away:str = Form(...)):
     global FAVORITES
 
-    exist = next((f for f in FAVORITES
-                  if f["home"]==home and f["away"]==away), None)
+    exist = next(
+        (f for f in FAVORITES
+         if f["home"] == home and f["away"] == away),
+        None
+    )
 
     if exist:
         FAVORITES = [
             f for f in FAVORITES
-            if not (f["home"]==home and f["away"]==away)
+            if not (f["home"] == home and f["away"] == away)
         ]
-        return {"status":"removed"}
+        return {"status": "removed"}
     else:
-        FAVORITES.append({"home":home,"away":away})
-        return {"status":"added"}
+        FAVORITES.append({
+            "home": home,
+            "away": away
+        })
+        return {"status": "added"}
 
 
 @app.get("/favorites", response_class=HTMLResponse)
 def favorites():
+
     html = ""
+
     for f in FAVORITES:
         html += f"""
-        <div style='background:#1e293b;margin:10px;padding:15px;border-radius:12px;'>
+        <div style='background:#1e293b;
+                    margin:10px;
+                    padding:15px;
+                    border-radius:12px;'>
         {f["home"]} vs {f["away"]}
         </div>
         """
@@ -658,6 +758,7 @@ def favorites():
     <body style='background:#0f1720;color:white;padding:20px;'>
     <h2>즐겨찾기 목록</h2>
     {html}
+    <br>
     <button onclick="history.back()">← 뒤로</button>
     </body>
     </html>
@@ -670,13 +771,14 @@ def favorites():
 
 @app.get("/ledger", response_class=HTMLResponse)
 def ledger():
-    total = sum(item.get("profit",0) for item in LEDGER)
+
+    total = sum(item.get("profit", 0) for item in LEDGER)
 
     return f"""
     <html>
     <body style='background:#0f1720;color:white;padding:20px;'>
     <h2>가계부</h2>
-    총합: {round(total,2)}
+    총합: {round(total, 2)}
     <br><br>
     <button onclick="history.back()">← 뒤로</button>
     </body>
@@ -694,7 +796,11 @@ def memo():
     <html>
     <body style='background:#0f1720;color:white;padding:20px;'>
     <h2>메모장</h2>
-    <textarea style='width:100%;height:300px;background:#1e293b;color:white;'></textarea>
+    <textarea style='width:100%;
+                     height:300px;
+                     background:#1e293b;
+                     color:white;'>
+    </textarea>
     <br><br>
     <button onclick="history.back()">← 뒤로</button>
     </body>
