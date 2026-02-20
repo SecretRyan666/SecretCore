@@ -132,6 +132,7 @@ def distribution(df):
     DIST_CACHE[key] = result
     return result
 
+
 # =====================================================
 # 안전 EV
 # =====================================================
@@ -160,6 +161,7 @@ def safe_ev(dist,row):
         "추천":best
     }
 
+
 # =====================================================
 # SECRET 점수
 # =====================================================
@@ -182,6 +184,7 @@ def secret_score(row, df):
         "추천":ev_data["추천"]
     }
 
+
 # =====================================================
 # 로그인
 # =====================================================
@@ -192,6 +195,7 @@ def login(username: str = Form(...), password: str = Form(...)):
     if username == "ryan" and password == "963258":
         LOGGED_IN = True
     return RedirectResponse("/", status_code=302)
+
 
 @app.get("/logout")
 def logout():
@@ -252,7 +256,6 @@ def upload(file: UploadFile = File(...)):
 
     return RedirectResponse("/", status_code=302)
 
-
 # =====================================================
 # self_check
 # =====================================================
@@ -269,7 +272,7 @@ def self_check():
     )
 
     try:
-        _ = CURRENT_DF.iloc[:, COL_WIN_ODDS]
+        _ = CURRENT_DF.iloc[:, COL_NO]
         _ = CURRENT_DF.iloc[:, COL_TYPE]
         report["index_access_ok"] = True
     except:
@@ -291,8 +294,9 @@ def health():
         "self_check": self_check()
     }
 
+
 # =====================================================
-# Page1 - 메인
+# Page1 - 메인 (COL_NO 기준 링크)
 # =====================================================
 
 @app.get("/", response_class=HTMLResponse)
@@ -341,29 +345,9 @@ border-bottom:1px solid #1e293b;">
 
 <script>
 
-function updateConditionBar(){
-    let params = new URLSearchParams(window.location.search);
-    let dir = params.get("dir");
-    let handi = params.get("handi");
-
-    let text = "기본조건: 경기전 · 일반/핸디1";
-
-    if(dir){
-        text += " · 정역=" + dir;
-    }
-    if(handi){
-        text += " · 핸디=" + handi;
-    }
-
-    document.getElementById("conditionBar").innerText = text;
-}
-
 async function load(){
 
-    updateConditionBar();
-
-    let params = new URLSearchParams(window.location.search);
-    let r = await fetch('/matches?' + params.toString());
+    let r = await fetch('/matches');
     let data = await r.json();
 
     let html="";
@@ -380,7 +364,7 @@ async function load(){
         <b>${row[6]}</b> vs <b>${row[7]}</b><br>
         승 ${row[8]} | 무 ${row[9]} | 패 ${row[10]}<br>
         ${row[14]} · ${row[16]} · ${row[11]} · ${row[15]} · ${row[12]}<br>
-        <a href="/detail?year=${row[1]}&match=${row[3]}" 
+        <a href="/detail?no=${row[0]}" 
         style="color:#38bdf8;">정보</a>
         </div>`;
     });
@@ -398,45 +382,29 @@ load();
 
 
 # =====================================================
-# 경기목록 API (기본조건 + 보조필터 AND + SECRET)
+# 경기목록 API (기본조건 + SECRET + NO 유지)
 # =====================================================
 
 @app.get("/matches")
-def matches(
-    dir: str = None,
-    handi: str = None
-):
+def matches():
 
     df = CURRENT_DF
     if df.empty:
         return []
 
-    # 기본조건 고정
     base_df = df[
-        (df.iloc[:, COL_RESULT]=="경기전") &
+        (df.iloc[:, COL_RESULT] == "경기전") &
         (
-            (df.iloc[:, COL_TYPE]=="일반") |
-            (df.iloc[:, COL_TYPE]=="핸디1")
+            (df.iloc[:, COL_TYPE] == "일반") |
+            (df.iloc[:, COL_TYPE] == "핸디1")
         )
     ]
-
-    # 보조필터 AND 누적
-    if dir:
-        base_df = base_df[
-            base_df.iloc[:, COL_DIR] == dir
-        ]
-
-    if handi:
-        base_df = base_df[
-            base_df.iloc[:, COL_HANDI] == handi
-        ]
 
     result = []
 
     for _, row in base_df.iterrows():
 
         data = row.values.tolist()
-
         sec = secret_score(row, df)
 
         is_secret = bool(
@@ -447,26 +415,23 @@ def matches(
 
         result.append({
             "row": list(map(str, data)),
-            "secret": bool(is_secret)
+            "secret": is_secret
         })
 
     return result
 
 # =====================================================
-# Page2 - 상세 분석
+# Page2 - 상세 분석 (COL_NO 단일 조회)
 # =====================================================
 
 @app.get("/detail", response_class=HTMLResponse)
-def detail(year:str, match:str):
+def detail(no: str):
 
     df = CURRENT_DF
     if df.empty:
         return "<h2>데이터 없음</h2>"
 
-    row_df = df[
-        (df.iloc[:, COL_YEAR] == str(year)) &
-        (df.iloc[:, COL_MATCH] == str(match))
-    ]
+    row_df = df[df.iloc[:, COL_NO] == str(no)]
 
     if row_df.empty:
         return "<h2>경기 없음</h2>"
@@ -524,11 +489,8 @@ def detail(year:str, match:str):
     패 EV: {ev_data["EV"]["패"]}<br>
 
     <br>
-    <a href="/page3?team={home}&league={league}">홈팀 분석</a><br>
-    <a href="/page3?team={away}&league={league}">원정팀 분석</a><br>
-    <a href="/page4?win={row.iloc[COL_WIN_ODDS]}&draw={row.iloc[COL_DRAW_ODDS]}&lose={row.iloc[COL_LOSE_ODDS]}">
-    배당 분석
-    </a>
+    <a href="/page3?no={row.iloc[COL_NO]}">팀 분석</a><br>
+    <a href="/page4?no={row.iloc[COL_NO]}">배당 분석</a>
 
     <br><br>
     <button onclick="history.back()">← 뒤로</button>
@@ -539,15 +501,25 @@ def detail(year:str, match:str):
 
 
 # =====================================================
-# Page3 - 팀 분석 (접기 구조)
+# Page3 - 팀 분석 (COL_NO 기준 → 동일 row 사용)
 # =====================================================
 
 @app.get("/page3", response_class=HTMLResponse)
-def page3(team:str, league:str=None):
+def page3(no: str):
 
     df = CURRENT_DF
     if df.empty:
         return "<h2>데이터 없음</h2>"
+
+    row_df = df[df.iloc[:, COL_NO] == str(no)]
+
+    if row_df.empty:
+        return "<h2>경기 없음</h2>"
+
+    row = row_df.iloc[0]
+
+    team   = row.iloc[COL_HOME]
+    league = row.iloc[COL_LEAGUE]
 
     team_df = df[
         (df.iloc[:, COL_HOME] == team) |
@@ -556,20 +528,10 @@ def page3(team:str, league:str=None):
 
     all_dist = distribution(team_df)
 
-    if league:
-        league_df = team_df[
-            team_df.iloc[:, COL_LEAGUE] == league
-        ]
-        league_dist = distribution(league_df)
-    else:
-        league_dist = {"총":0,"승":0,"무":0,"패":0,"wp":0,"dp":0,"lp":0}
-
-    # 홈/원정 분리
-    home_df = df[df.iloc[:, COL_HOME] == team]
-    away_df = df[df.iloc[:, COL_AWAY] == team]
-
-    home_dist = distribution(home_df)
-    away_dist = distribution(away_df)
+    league_df = team_df[
+        team_df.iloc[:, COL_LEAGUE] == league
+    ]
+    league_dist = distribution(league_df)
 
     return f"""
     <html>
@@ -577,50 +539,19 @@ def page3(team:str, league:str=None):
 
     <h2>{team} 팀 분석</h2>
 
-    <details open>
-    <summary><b>전체 통계</b></summary>
+    <h3>전체</h3>
     총 {all_dist["총"]}경기<br>
     승 {all_dist["wp"]}%<br>
     무 {all_dist["dp"]}%<br>
     패 {all_dist["lp"]}%<br>
-    </details>
 
     <br>
 
-    <details>
-    <summary><b>리그 통계</b></summary>
+    <h3>리그</h3>
     총 {league_dist["총"]}경기<br>
     승 {league_dist["wp"]}%<br>
     무 {league_dist["dp"]}%<br>
     패 {league_dist["lp"]}%<br>
-    </details>
-
-    <br>
-
-    <details>
-    <summary><b>홈 vs 원정 비교</b></summary>
-
-    <div style="display:flex;gap:12px;">
-
-    <div style="flex:1;background:#1e293b;padding:12px;border-radius:12px;">
-    <b>홈경기</b><br>
-    총 {home_dist["총"]}경기<br>
-    승 {home_dist["wp"]}%<br>
-    무 {home_dist["dp"]}%<br>
-    패 {home_dist["lp"]}%<br>
-    </div>
-
-    <div style="flex:1;background:#1e293b;padding:12px;border-radius:12px;">
-    <b>원정경기</b><br>
-    총 {away_dist["총"]}경기<br>
-    승 {away_dist["wp"]}%<br>
-    무 {away_dist["dp"]}%<br>
-    패 {away_dist["lp"]}%<br>
-    </div>
-
-    </div>
-
-    </details>
 
     <br>
     <button onclick="history.back()">← 뒤로</button>
@@ -629,22 +560,29 @@ def page3(team:str, league:str=None):
     </html>
     """
 
+
 # =====================================================
-# Page4 - 배당 분석 (고정카드 + 3열EV + 접기구조)
+# Page4 - 배당 분석 (COL_NO 기준 → 배당값 직접 참조)
 # =====================================================
 
 @app.get("/page4", response_class=HTMLResponse)
-def page4(win:str, draw:str, lose:str):
+def page4(no: str):
 
     df = CURRENT_DF
     if df.empty:
         return "<h2>데이터 없음</h2>"
 
-    win_str  = str(win)
-    draw_str = str(draw)
-    lose_str = str(lose)
+    row_df = df[df.iloc[:, COL_NO] == str(no)]
 
-    # 완전일치
+    if row_df.empty:
+        return "<h2>경기 없음</h2>"
+
+    row = row_df.iloc[0]
+
+    win_str  = row.iloc[COL_WIN_ODDS]
+    draw_str = row.iloc[COL_DRAW_ODDS]
+    lose_str = row.iloc[COL_LOSE_ODDS]
+
     exact_df = df[
         (df.iloc[:, COL_WIN_ODDS]  == win_str) &
         (df.iloc[:, COL_DRAW_ODDS] == draw_str) &
@@ -652,36 +590,13 @@ def page4(win:str, draw:str, lose:str):
     ]
     exact_dist = distribution(exact_df)
 
-    # 단일 동일
-    win_df  = df[df.iloc[:, COL_WIN_ODDS]  == win_str]
-    draw_df = df[df.iloc[:, COL_DRAW_ODDS] == draw_str]
-    lose_df = df[df.iloc[:, COL_LOSE_ODDS] == lose_str]
-
-    win_dist  = distribution(win_df)
-    draw_dist = distribution(draw_df)
-    lose_dist = distribution(lose_df)
-
-    # 3열 EV 비교
-    win_ev  = safe_ev(win_dist,  win_df.iloc[0])  if not win_df.empty  else {"EV":{"승":0,"무":0,"패":0},"추천":"없음"}
-    draw_ev = safe_ev(draw_dist, draw_df.iloc[0]) if not draw_df.empty else {"EV":{"승":0,"무":0,"패":0},"추천":"없음"}
-    lose_ev = safe_ev(lose_dist, lose_df.iloc[0]) if not lose_df.empty else {"EV":{"승":0,"무":0,"패":0},"추천":"없음"}
-
     return f"""
     <html>
     <body style="background:#0f1720;color:white;padding:20px;">
 
-    <!-- 상단 고정 완전일치 -->
-    <div style="
-    position:sticky;
-    top:0;
-    background:#0f1720;
-    padding:15px;
-    border-bottom:1px solid #1e293b;
-    z-index:10;
-    ">
-
     <h2>배당 분석</h2>
-    <b>승 {win_str} / 무 {draw_str} / 패 {lose_str}</b>
+    승 {win_str} / 무 {draw_str} / 패 {lose_str}
+
     <br><br>
 
     <h3>완전일치</h3>
@@ -690,71 +605,12 @@ def page4(win:str, draw:str, lose:str):
     무 {exact_dist["dp"]}%<br>
     패 {exact_dist["lp"]}%<br>
 
-    </div>
-
     <br>
-
-    <!-- 3열 EV 비교 -->
-    <div style="display:flex;gap:12px;margin-top:20px;">
-
-    <div style="flex:1;background:#1e293b;padding:12px;border-radius:12px;">
-    <b>승배당 기준</b><br>
-    추천: {win_ev["추천"]}<br>
-    EV(승): {win_ev["EV"]["승"]}
-    </div>
-
-    <div style="flex:1;background:#1e293b;padding:12px;border-radius:12px;">
-    <b>무배당 기준</b><br>
-    추천: {draw_ev["추천"]}<br>
-    EV(무): {draw_ev["EV"]["무"]}
-    </div>
-
-    <div style="flex:1;background:#1e293b;padding:12px;border-radius:12px;">
-    <b>패배당 기준</b><br>
-    추천: {lose_ev["추천"]}<br>
-    EV(패): {lose_ev["EV"]["패"]}
-    </div>
-
-    </div>
-
-    <br>
-
-    <!-- 접기 구조 -->
-    <details>
-    <summary><b>승배당 동일 통계</b></summary>
-    총 {win_dist["총"]}경기<br>
-    승 {win_dist["wp"]}%<br>
-    무 {win_dist["dp"]}%<br>
-    패 {win_dist["lp"]}%<br>
-    </details>
-
-    <br>
-
-    <details>
-    <summary><b>무배당 동일 통계</b></summary>
-    총 {draw_dist["총"]}경기<br>
-    승 {draw_dist["wp"]}%<br>
-    무 {draw_dist["dp"]}%<br>
-    패 {draw_dist["lp"]}%<br>
-    </details>
-
-    <br>
-
-    <details>
-    <summary><b>패배당 동일 통계</b></summary>
-    총 {lose_dist["총"]}경기<br>
-    승 {lose_dist["wp"]}%<br>
-    무 {lose_dist["dp"]}%<br>
-    패 {lose_dist["lp"]}%<br>
-    </details>
-
-    <br><br>
     <button onclick="history.back()">← 뒤로</button>
 
     </body>
     </html>
     """
-
 
 # =====================================================
 # 즐겨찾기
@@ -800,12 +656,13 @@ def favorites():
 
 
 # =====================================================
-# 가계부 / 메모 / 캡처
+# 가계부
 # =====================================================
 
 @app.get("/ledger", response_class=HTMLResponse)
 def ledger():
     total = sum(item.get("profit",0) for item in LEDGER)
+
     return f"""
     <html>
     <body style='background:#0f1720;color:white;padding:20px;'>
@@ -816,6 +673,11 @@ def ledger():
     </body>
     </html>
     """
+
+
+# =====================================================
+# 메모장
+# =====================================================
 
 @app.get("/memo", response_class=HTMLResponse)
 def memo():
@@ -829,6 +691,11 @@ def memo():
     </body>
     </html>
     """
+
+
+# =====================================================
+# 캡처
+# =====================================================
 
 @app.get("/capture", response_class=HTMLResponse)
 def capture():
