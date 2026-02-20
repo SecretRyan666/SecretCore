@@ -425,7 +425,10 @@ def matches():
 # =====================================================
 
 @app.get("/detail", response_class=HTMLResponse)
-def detail(no: str):
+def detail(no: str = None):
+
+    if not no:
+        return "<h2>잘못된 접근</h2>"
 
     df = CURRENT_DF
     if df.empty:
@@ -505,7 +508,10 @@ def detail(no: str):
 # =====================================================
 
 @app.get("/page3", response_class=HTMLResponse)
-def page3(no: str):
+def page3(no: str = None):
+
+    if not no:
+        return "<h2>잘못된 접근</h2>"
 
     df = CURRENT_DF
     if df.empty:
@@ -566,7 +572,10 @@ def page3(no: str):
 # =====================================================
 
 @app.get("/page4", response_class=HTMLResponse)
-def page4(no: str):
+def page4(no: str = None):
+
+    if not no:
+        return "<h2>잘못된 접근</h2>"
 
     df = CURRENT_DF
     if df.empty:
