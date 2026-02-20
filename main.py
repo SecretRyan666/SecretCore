@@ -439,15 +439,15 @@ def matches(
 
         sec = secret_score(row, df)
 
-        is_secret = (
+        is_secret = bool(
             sec["score"] > 0.05 and
             sec["sample"] >= 20 and
             sec["추천"] != "없음"
         )
 
         result.append({
-            "row": data,
-            "secret": is_secret
+            "row": list(map(str, data)),
+            "secret": bool(is_secret)
         })
 
     return result
