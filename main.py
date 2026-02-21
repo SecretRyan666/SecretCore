@@ -195,40 +195,38 @@ def build_five_cond_cache(df):
     if df.empty:
         return
 
-    for _, row in df.iterrows():
+    # 5조건 그룹핑
+    group_cols = [
+        COL_TYPE,
+        COL_HOMEAWAY,
+        COL_GENERAL,
+        COL_DIR,
+        COL_HANDI
+    ]
 
-        key = (
-            row.iloc[COL_TYPE],
-            row.iloc[COL_HOMEAWAY],
-            row.iloc[COL_GENERAL],
-            row.iloc[COL_DIR],
-            row.iloc[COL_HANDI]
-        )
+    grouped = df.groupby(
+        df.columns[group_cols].tolist() + [df.columns[COL_RESULT]]
+    ).size().unstack(fill_value=0)
 
-        if key not in FIVE_COND_DIST:
-            FIVE_COND_DIST[key] = {
-                "총":0,"승":0,"무":0,"패":0
-            }
+    for key, row in grouped.iterrows():
 
-        FIVE_COND_DIST[key]["총"] += 1
+        total = row.sum()
 
-        result = row.iloc[COL_RESULT]
+        FIVE_COND_DIST[key] = {
+            "총": int(total),
+            "승": int(row.get("승", 0)),
+            "무": int(row.get("무", 0)),
+            "패": int(row.get("패", 0)),
+        }
 
-        if result == "승":
-            FIVE_COND_DIST[key]["승"] += 1
-        elif result == "무":
-            FIVE_COND_DIST[key]["무"] += 1
-        elif result == "패":
-            FIVE_COND_DIST[key]["패"] += 1
-
-    for key, v in FIVE_COND_DIST.items():
-        total = v["총"]
         if total > 0:
-            v["wp"] = round(v["승"]/total*100,2)
-            v["dp"] = round(v["무"]/total*100,2)
-            v["lp"] = round(v["패"]/total*100,2)
+            FIVE_COND_DIST[key]["wp"] = round(row.get("승", 0)/total*100,2)
+            FIVE_COND_DIST[key]["dp"] = round(row.get("무", 0)/total*100,2)
+            FIVE_COND_DIST[key]["lp"] = round(row.get("패", 0)/total*100,2)
         else:
-            v["wp"] = v["dp"] = v["lp"] = 0
+            FIVE_COND_DIST[key]["wp"] = 0
+            FIVE_COND_DIST[key]["dp"] = 0
+            FIVE_COND_DIST[key]["lp"] = 0
 
 # =====================================================
 # 안전 EV
