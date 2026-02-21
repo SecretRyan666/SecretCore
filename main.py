@@ -574,10 +574,10 @@ opacity:0.8;border-bottom:1px solid #1e293b;">
 <div id="list" style="padding-bottom:100px;"></div>
 
 <div class="bottom-nav">
-    <a href="/ledger">🏠</a>
-    <a href="/memo">📝</a>
-    <a href="/capture">📸</a>
-    <a href="/favorites">⭐</a>
+    <a href="/strategy1-view">🧠</a>
+    <a href="/strategy2-view">🎯</a>
+    <a href="/history">📊</a>
+    <a href="/evaluate">🧪</a>
 </div>
 
 <!-- 필터 모달 -->
@@ -1305,8 +1305,8 @@ def page4(
 # Strategy1 - 3x3x3x3 = 81조합
 # =====================================================
 
-@app.get("/strategy1")
-def strategy1():
+@app.get("/strategy1",
+response_class=HTMLResponse)
 
     df = CURRENT_DF
     if df.empty:
@@ -1587,6 +1587,196 @@ def evaluate():
         json.dump(history,f,indent=2)
 
     return record
+
+# =====================================================
+# 전략1 UI 페이지
+# =====================================================
+
+@app.get("/strategy1-view", response_class=HTMLResponse)
+def strategy1_view():
+
+    data = strategy1()
+
+    if "error" in data:
+        return "<h2>경기 수 부족</h2>"
+
+    html = "<h2>🧠 전략1</h2>"
+
+    for i, port in enumerate(
+        [data["port1"], data["port2"], data["port3"], data["port4"]],
+        start=1
+    ):
+        html += f"<h3>Port{i}</h3>"
+        for m in port:
+            html += f"""
+            <div>
+            {m["home"]} vs {m["away"]} |
+            <b>{m["pick"]}</b> |
+            배당 {m["odds"]}
+            </div>
+            """
+
+    html += f"<br>총 조합수: {data['total_combos']}"
+
+    # ===== 평균/최소/최대 배당 계산 =====
+    combo_odds = []
+
+    for a in data["port1"]:
+        for b in data["port2"]:
+            for c in data["port3"]:
+                for d in data["port4"]:
+                    combo_odds.append(
+                        a["odds"] *
+                        b["odds"] *
+                        c["odds"] *
+                        d["odds"]
+                    )
+
+    avg_odds = round(sum(combo_odds)/len(combo_odds),2)
+    min_odds = round(min(combo_odds),2)
+    max_odds = round(max(combo_odds),2)
+    avg_return = round(avg_odds * 1000,0)
+
+    html += f"""
+    <br>
+    평균 조합 배당: {avg_odds}<br>
+    최소 조합 배당: {min_odds}<br>
+    최대 조합 배당: {max_odds}<br>
+    1000원 기준 평균 수익: {avg_return}원
+    """
+
+    return f"""
+    <html>
+    <body style="background:#0f1720;color:white;padding:20px;">
+    {html}
+    <br><br>
+    <button onclick="history.back()">← 뒤로</button>
+    </body>
+    </html>
+    """
+
+# =====================================================
+# 전략2 UI 페이지
+# =====================================================
+
+@app.get("/strategy2-view", response_class=HTMLResponse)
+def strategy2_view():
+
+    data = strategy2()
+
+    if "error" in data:
+        return "<h2>경기 수 부족</h2>"
+
+    html = "<h2>🎯 전략2 (10x10 = 100조합)</h2>"
+
+    for i, port in enumerate(
+        [data["port1"], data["port2"]],
+        start=1
+    ):
+        html += f"<h3>Port{i}</h3>"
+        for m in port:
+            html += f"""
+            <div>
+            {m["home"]} vs {m["away"]} |
+            <b>{m["pick"]}</b> |
+            배당 {m["odds"]}
+            </div>
+            """
+
+    html += f"<br>총 조합수: {data['total_combos']}"
+
+    # ===== 평균/최소/최대 배당 계산 =====
+    combo_odds = []
+
+    for a in data["port1"]:
+        for b in data["port2"]:
+            combo_odds.append(
+                a["odds"] *
+                b["odds"]
+            )
+
+    avg_odds = round(sum(combo_odds)/len(combo_odds),2)
+    min_odds = round(min(combo_odds),2)
+    max_odds = round(max(combo_odds),2)
+    avg_return = round(avg_odds * 1000,0)
+
+    html += f"""
+    <br>
+    평균 조합 배당: {avg_odds}<br>
+    최소 조합 배당: {min_odds}<br>
+    최대 조합 배당: {max_odds}<br>
+    1000원 기준 평균 수익: {avg_return}원
+    """
+
+    return f"""
+    <html>
+    <body style="background:#0f1720;color:white;padding:20px;">
+    {html}
+    <br><br>
+    <button onclick="history.back()">← 뒤로</button>
+    </body>
+    </html>
+    """
+
+@app.get("/history", response_class=HTMLResponse)
+def history_page():
+
+    if not os.path.exists(STRATEGY_HISTORY_FILE):
+        return "<h2>기록 없음</h2>"
+
+    with open(STRATEGY_HISTORY_FILE,"r") as f:
+        history = json.load(f)
+
+    total_net_s1 = 0
+    total_net_s2 = 0
+
+    rows = ""
+
+    for i, record in enumerate(history, start=1):
+
+        s1 = record.get("strategy1")
+        s2 = record.get("strategy2")
+
+        if s1:
+            total_net_s1 += s1["net"]
+        if s2:
+            total_net_s2 += s2["net"]
+
+        rows += f"""
+        <tr>
+            <td>{i}</td>
+            <td>{s1["roi"] if s1 else "-"}</td>
+            <td>{s2["roi"] if s2 else "-"}</td>
+        </tr>
+        """
+
+    return f"""
+    <html>
+    <body style='background:#0f1720;color:white;padding:30px;font-family:Arial;'>
+
+    <h2>📊 전략 히스토리</h2>
+
+    <table border="1" cellpadding="8" style="border-collapse:collapse;">
+        <tr>
+            <th>회차</th>
+            <th>Strategy1 ROI</th>
+            <th>Strategy2 ROI</th>
+        </tr>
+        {rows}
+    </table>
+
+    <br><br>
+
+    <h3>누적 결과</h3>
+    Strategy1 누적 손익: {round(total_net_s1,0)} 원<br>
+    Strategy2 누적 손익: {round(total_net_s2,0)} 원<br>
+
+    <br>
+    <button onclick="history.back()">← 뒤로</button>
+
+    </body>
+    </html>
+    """
 
 # =====================================================
 # 실행부
