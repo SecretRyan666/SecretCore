@@ -292,6 +292,29 @@ def upload(file: UploadFile = File(...)):
 
     return RedirectResponse("/", status_code=302)
 
+# =====================================================
+# 업로드 페이지
+# =====================================================
+
+@app.get("/page-upload", response_class=HTMLResponse)
+def page_upload():
+
+    if not LOGGED_IN:
+        return RedirectResponse("/", status_code=302)
+
+    return """
+    <html>
+    <body style='background:#0f1720;color:white;padding:30px;font-family:Arial;'>
+    <h2>📤 업로드</h2>
+    <form action="/upload-data" method="post" enctype="multipart/form-data">
+        <input type="file" name="file" required><br><br>
+        <button type="submit">업로드 실행</button>
+    </form>
+    <br>
+    <button onclick="history.back()">← 뒤로</button>
+    </body>
+    </html>
+    """
 
 # =====================================================
 # self_check
