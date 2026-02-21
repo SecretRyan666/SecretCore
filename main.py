@@ -538,13 +538,23 @@ function applyFilters(){
     window.location.href = "/?" + params.toString();
 }
 
-function updateConditionBar(){
-    let params = new URLSearchParams(window.location.search);
-    let text = "기본조건: 경기전 · 일반/핸디1";
+async function updateConditionBar(){
 
-    params.forEach((v,k)=>{
-        text += " · " + k + "=" + v;
-    });
+    let params = new URLSearchParams(window.location.search);
+
+    let r = await fetch('/matches?' + params.toString());
+    let data = await r.json();
+
+    let text = "";
+
+    if(data.length > 0){
+        let first = data[0].row;
+        let year = first[1];
+        let round = first[2];
+        text = year + "년 · " + round + "회차";
+    } else {
+        text = "경기 없음";
+    }
 
     document.getElementById("conditionBar").innerText = text;
 }
@@ -572,9 +582,28 @@ async function load(){
 
     data.forEach(function(m){
 
-        let row = m.row;
-        let badge = m.secret ?
-        "<div style='color:#22c55e;font-weight:bold;margin-bottom:6px;'>SECRET</div>" : "";
+        let badge = "";
+
+if(m.secret){
+
+    badge = `
+    <div style="
+        position:absolute;
+        right:18px;
+        top:50%;
+        transform:translateY(-50%);
+        background:#22c55e;
+        color:#0f1720;
+        padding:8px 12px;
+        border-radius:14px;
+        font-size:12px;
+        font-weight:bold;
+        box-shadow:0 4px 10px rgba(0,0,0,0.4);
+    ">
+        시크릿픽 ${m.pick}
+    </div>
+    `;
+}
 
         html+=`
         <div class="card">
@@ -643,11 +672,91 @@ def matches(
         )
 
         result.append({
-            "row": list(map(str, data)),
-            "secret": is_secret
-        })
+    "row": list(map(str, data)),
+    "secret": is_secret,
+    "pick": sec["추천"] if is_secret else ""
+})
 
     return result
+
+# =====================================================
+# 즐겨찾기 토글
+# =====================================================
+
+@app.post("/fav-toggle")
+def fav_toggle(home: str = Form(...), away: str = Form(...)):
+
+    global FAVORITES
+
+    key = f"{home}__{away}"
+
+    if key in FAVORITES:
+        FAVORITES.remove(key)
+        return {"status": "removed"}
+    else:
+        FAVORITES.append(key)
+        return {"status": "added"}
+
+# =====================================================
+# Ledger
+# =====================================================
+
+@app.get("/ledger", response_class=HTMLResponse)
+def ledger_page():
+    return """
+    <html><body style='background:#0f1720;color:white;padding:30px;'>
+    <h2>📊 Ledger</h2>
+    <p>준비중입니다.</p>
+    <button onclick="history.back()">← 뒤로</button>
+    </body></html>
+    """
+
+# =====================================================
+# Memo
+# =====================================================
+
+@app.get("/memo", response_class=HTMLResponse)
+def memo_page():
+    return """
+    <html><body style='background:#0f1720;color:white;padding:30px;'>
+    <h2>📝 Memo</h2>
+    <p>준비중입니다.</p>
+    <button onclick="history.back()">← 뒤로</button>
+    </body></html>
+    """
+
+# =====================================================
+# Capture
+# =====================================================
+
+@app.get("/capture", response_class=HTMLResponse)
+def capture_page():
+    return """
+    <html><body style='background:#0f1720;color:white;padding:30px;'>
+    <h2>📸 Capture</h2>
+    <p>준비중입니다.</p>
+    <button onclick="history.back()">← 뒤로</button>
+    </body></html>
+    """
+
+# =====================================================
+# Favorites
+# =====================================================
+
+@app.get("/favorites", response_class=HTMLResponse)
+def favorites_page():
+
+    global FAVORITES
+
+    items = "<br>".join(FAVORITES) if FAVORITES else "없음"
+
+    return f"""
+    <html><body style='background:#0f1720;color:white;padding:30px;'>
+    <h2>⭐ Favorites</h2>
+    <p>{items}</p>
+    <button onclick="history.back()">← 뒤로</button>
+    </body></html>
+    """
 
 # =====================================================
 # PRO 막대그래프
