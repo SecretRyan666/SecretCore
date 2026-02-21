@@ -176,7 +176,6 @@ def distribution(df):
     DIST_CACHE[key] = result
     return result
 
-
 # =====================================================
 # 안전 EV
 # =====================================================
@@ -205,7 +204,6 @@ def safe_ev(dist, row):
         },
         "추천":best
     }
-
 
 # =====================================================
 # SECRET 점수 (조합 캐싱 적용)
@@ -239,7 +237,6 @@ def secret_score_fast(row, df):
     SECRET_CACHE[cond_key] = result
     return result
 
-
 # =====================================================
 # 로그인
 # =====================================================
@@ -260,37 +257,6 @@ def logout():
     LOGGED_IN = False
     return RedirectResponse("/", status_code=302)
 
-
-# =====================================================
-# 업로드 처리
-# =====================================================
-
-@app.post("/upload-data")
-def upload(file: UploadFile = File(...)):
-
-    global CURRENT_DF
-
-    df = pd.read_csv(
-        file.file,
-        encoding="utf-8-sig",
-        dtype=str,
-        low_memory=False
-    )
-
-    if df.shape[1] != EXPECTED_COLS:
-        return {
-            "error": f"컬럼 불일치: {df.shape[1]} / 기대값 {EXPECTED_COLS}"
-        }
-
-    df.to_csv(DATA_FILE, index=False, encoding="utf-8-sig")
-
-    CURRENT_DF = df
-
-    # 캐시 초기화
-    DIST_CACHE.clear()
-    SECRET_CACHE.clear()
-
-    return RedirectResponse("/", status_code=302)
 
 # =====================================================
 # 업로드 페이지
@@ -315,6 +281,42 @@ def page_upload():
     </body>
     </html>
     """
+
+
+# =====================================================
+# 업로드 처리
+# dtype=str 유지
+# 컬럼 검증
+# DIST_CACHE + SECRET_CACHE 초기화
+# =====================================================
+
+@app.post("/upload-data")
+def upload(file: UploadFile = File(...)):
+
+    global CURRENT_DF
+
+    df = pd.read_csv(
+        file.file,
+        encoding="utf-8-sig",
+        dtype=str,
+        low_memory=False
+    )
+
+    if df.shape[1] != EXPECTED_COLS:
+        return {
+            "error": f"컬럼 불일치: {df.shape[1]} / 기대값 {EXPECTED_COLS}"
+        }
+
+    df.to_csv(DATA_FILE, index=False, encoding="utf-8-sig")
+
+    CURRENT_DF = df
+
+    # 캐시 초기화 (중요)
+    DIST_CACHE.clear()
+    SECRET_CACHE.clear()
+
+    return RedirectResponse("/", status_code=302)
+
 
 # =====================================================
 # self_check
@@ -359,7 +361,8 @@ def health():
 
 
 # =====================================================
-# 필터 값 추출 API (경기전 기준 적용)
+# 필터 값 추출 API (Page1 모달용)
+# 동적 데이터 기반
 # =====================================================
 
 @app.get("/filters")
@@ -370,11 +373,6 @@ def filters():
     if df.empty:
         return {}
 
-    # 🔥 경기전만 기준
-    df = df[
-        df.iloc[:, COL_RESULT] == "경기전"
-    ]
-
     return {
         "type": sorted(df.iloc[:, COL_TYPE].dropna().unique().tolist()),
         "homeaway": sorted(df.iloc[:, COL_HOMEAWAY].dropna().unique().tolist()),
@@ -384,7 +382,7 @@ def filters():
     }
 
 # =====================================================
-# Page1 - 메인
+# Page1 - 메인 (PRO UI + 다중필터 + 조건표시줄)
 # =====================================================
 
 @app.get("/", response_class=HTMLResponse)
@@ -425,28 +423,30 @@ padding:14px 18px;background:#111827;position:sticky;top:0;z-index:50;
 background:#1e293b;margin:14px;padding:18px;
 border-radius:18px;position:relative;
 box-shadow:0 4px 12px rgba(0,0,0,0.3);
-overflow:hidden;
-}
-
-.secret-overlay{
-position:absolute;
-top:50%;
-left:50%;
-transform:translate(-50%,-50%);
-font-size:22px;
-font-weight:bold;
-color:#22c55e;
-opacity:0.18;
-pointer-events:none;
 }
 
 .info-btn{position:absolute;right:14px;top:12px;font-size:12px;}
 .star-btn{position:absolute;right:14px;top:40px;font-size:18px;color:#6b7280;}
+.star-active{color:#facc15;}
 
 .bottom-nav{
 position:fixed;bottom:0;width:100%;
 background:#111827;display:flex;
 justify-content:space-around;padding:12px 0;font-size:20px;
+}
+
+.modal{
+display:none;position:fixed;top:0;left:0;width:100%;height:100%;
+background:rgba(0,0,0,0.6);justify-content:center;align-items:center;
+}
+
+.modal-content{
+background:#1e293b;padding:20px;border-radius:16px;
+width:340px;max-height:80vh;overflow:auto;
+}
+
+.checkbox-group{
+margin-bottom:12px;
 }
 </style>
 </head>
@@ -455,7 +455,7 @@ justify-content:space-around;padding:12px 0;font-size:20px;
 <div class="header">
     <div class="logo">SecretCore PRO</div>
     <div class="top-icons">
-        <div onclick="location.href='/'">🔄</div>
+        <div onclick="resetFilters()">🔄</div>
         <div onclick="openModal()">🔍</div>
         <div onclick="location.href='/page-upload'">📤</div>
         <div onclick="location.href='/logout'">👤</div>
@@ -463,9 +463,9 @@ justify-content:space-around;padding:12px 0;font-size:20px;
 </div>
 
 <div id="conditionBar"
-style="padding:8px 16px;font-size:14px;
-border-bottom:1px solid #1e293b;">
-로딩중...
+style="padding:8px 16px;font-size:12px;
+opacity:0.8;border-bottom:1px solid #1e293b;">
+기본조건
 </div>
 
 <div id="list" style="padding-bottom:100px;"></div>
@@ -477,46 +477,116 @@ border-bottom:1px solid #1e293b;">
     <a href="/favorites">⭐</a>
 </div>
 
+<!-- 필터 모달 -->
+<div class="modal" id="filterModal">
+  <div class="modal-content">
+    <h3>필터</h3>
+    <div id="filterArea"></div>
+    <button onclick="applyFilters()">적용</button>
+    <button onclick="closeModal()">닫기</button>
+  </div>
+</div>
+
 <script>
+
+function resetFilters(){
+    window.location.href="/";
+}
+
+function openModal(){
+    document.getElementById("filterModal").style.display="flex";
+    loadFilters();
+}
+
+function closeModal(){
+    document.getElementById("filterModal").style.display="none";
+}
+
+async function loadFilters(){
+    let res = await fetch("/filters");
+    let data = await res.json();
+
+    let html="";
+
+    for(let key in data){
+        html += "<div class='checkbox-group'><b>"+key+"</b><br>";
+        data[key].forEach(v=>{
+            html += `<label>
+            <input type="checkbox" name="${key}" value="${v}"> ${v}
+            </label><br>`;
+        });
+        html += "</div>";
+    }
+
+    document.getElementById("filterArea").innerHTML = html;
+}
+
+function applyFilters(){
+
+    let params = new URLSearchParams();
+
+    document.querySelectorAll("#filterArea input:checked")
+    .forEach(el=>{
+        if(params.has(el.name)){
+            params.set(el.name,
+                params.get(el.name)+","+el.value);
+        }else{
+            params.set(el.name, el.value);
+        }
+    });
+
+    window.location.href = "/?" + params.toString();
+}
+
+function updateConditionBar(){
+    let params = new URLSearchParams(window.location.search);
+    let text = "기본조건: 경기전 · 일반/핸디1";
+
+    params.forEach((v,k)=>{
+        text += " · " + k + "=" + v;
+    });
+
+    document.getElementById("conditionBar").innerText = text;
+}
+
+async function toggleFav(home,away,el){
+    let res = await fetch("/fav-toggle",{
+        method:"POST",
+        headers:{"Content-Type":"application/x-www-form-urlencoded"},
+        body:`home=${home}&away=${away}`
+    });
+    let data = await res.json();
+    if(data.status=="added") el.classList.add("star-active");
+    else el.classList.remove("star-active");
+}
 
 async function load(){
 
+    updateConditionBar();
+
     let params = new URLSearchParams(window.location.search);
     let r = await fetch('/matches?' + params.toString());
-    let json = await r.json();
-
-    let data = json.data;
-    let meta = json.meta;
-
-    if(meta.years.length>0 && meta.rounds.length>0){
-        document.getElementById("conditionBar").innerText =
-            meta.years[0] + "년 " + meta.rounds[0] + "회";
-    } else {
-        document.getElementById("conditionBar").innerText = "경기 없음";
-    }
+    let data = await r.json();
 
     let html="";
 
     data.forEach(function(m){
 
         let row = m.row;
-        let overlay = "";
-
-        if(m.secret){
-            overlay = `<div class="secret-overlay">
-                        시크릿픽 ${m.secret_pick}
-                       </div>`;
-        }
+        let badge = m.secret ?
+        "<div style='color:#22c55e;font-weight:bold;margin-bottom:6px;'>SECRET</div>" : "";
 
         html+=`
         <div class="card">
-        ${overlay}
+        ${badge}
         <div><b>${row[6]}</b> vs <b>${row[7]}</b></div>
         <div>승 ${row[8]} | 무 ${row[9]} | 패 ${row[10]}</div>
         <div>${row[14]} · ${row[16]} · ${row[11]} · ${row[15]} · ${row[12]}</div>
         <div class="info-btn">
             <a href="/detail?no=${row[0]}" style="color:#38bdf8;">정보</a>
         </div>
+        <div class="star-btn"
+        onclick="toggleFav('${row[6]}','${row[7]}',this)">★</div>
         </div>`;
     });
 
@@ -531,7 +601,7 @@ load();
 
 
 # =====================================================
-# 경기목록 API (meta + secret_pick 반환)
+# 경기목록 API (다중필터 + SECRET 최적화)
 # =====================================================
 
 @app.get("/matches")
@@ -545,7 +615,7 @@ def matches(
 
     df = CURRENT_DF
     if df.empty:
-        return {"meta":{"years":[],"rounds":[]},"data":[]}
+        return []
 
     base_df = df[
         (df.iloc[:, COL_RESULT] == "경기전") &
@@ -574,99 +644,10 @@ def matches(
 
         result.append({
             "row": list(map(str, data)),
-            "secret": is_secret,
-            "secret_pick": sec["추천"] if is_secret else ""
+            "secret": is_secret
         })
 
-    years = base_df.iloc[:, COL_YEAR].unique().tolist()
-    rounds = base_df.iloc[:, COL_ROUND].unique().tolist()
-
-    return {
-        "meta": {
-            "years": years,
-            "rounds": rounds
-        },
-        "data": result
-    }
-
-# =====================================================
-# 즐겨찾기 토글
-# =====================================================
-
-@app.post("/fav-toggle")
-def fav_toggle(home: str = Form(...), away: str = Form(...)):
-
-    global FAVORITES
-
-    key = f"{home}__{away}"
-
-    if key in FAVORITES:
-        FAVORITES.remove(key)
-        return {"status": "removed"}
-    else:
-        FAVORITES.append(key)
-        return {"status": "added"}
-
-# =====================================================
-# Ledger
-# =====================================================
-
-@app.get("/ledger", response_class=HTMLResponse)
-def ledger_page():
-    return """
-    <html><body style='background:#0f1720;color:white;padding:30px;'>
-    <h2>📊 Ledger</h2>
-    <p>준비중입니다.</p>
-    <button onclick="history.back()">← 뒤로</button>
-    </body></html>
-    """
-
-# =====================================================
-# Memo
-# =====================================================
-
-@app.get("/memo", response_class=HTMLResponse)
-def memo_page():
-    return """
-    <html><body style='background:#0f1720;color:white;padding:30px;'>
-    <h2>📝 Memo</h2>
-    <p>준비중입니다.</p>
-    <button onclick="history.back()">← 뒤로</button>
-    </body></html>
-    """
-
-# =====================================================
-# Capture
-# =====================================================
-
-@app.get("/capture", response_class=HTMLResponse)
-def capture_page():
-    return """
-    <html><body style='background:#0f1720;color:white;padding:30px;'>
-    <h2>📸 Capture</h2>
-    <p>준비중입니다.</p>
-    <button onclick="history.back()">← 뒤로</button>
-    </body></html>
-    """
-
-# =====================================================
-# Favorites
-# =====================================================
-
-@app.get("/favorites", response_class=HTMLResponse)
-def favorites_page():
-
-    global FAVORITES
-
-    items = "<br>".join(FAVORITES) if FAVORITES else "없음"
-
-    return f"""
-    <html><body style='background:#0f1720;color:white;padding:30px;'>
-    <h2>⭐ Favorites</h2>
-    <p>{items}</p>
-    <button onclick="history.back()">← 뒤로</button>
-    </body></html>
-    """
+    return result
 
 # =====================================================
 # PRO 막대그래프
@@ -691,7 +672,7 @@ def bar_html(percent, mode="win"):
     """
 
 # =====================================================
-# Page2 - 상세 분석
+# Page2 - 상세 분석 (필터 기반 분포 + 시크릿픽)
 # =====================================================
 
 @app.get("/detail", response_class=HTMLResponse)
@@ -721,17 +702,20 @@ def detail(
     away   = row.iloc[COL_AWAY]
     league = row.iloc[COL_LEAGUE]
 
+    # =========================
     # 필터 적용
+    # =========================
+
     filtered_df = apply_filters(
         df, type, homeaway, general, dir, handi
     )
 
-    # 5조건 완전일치
+    # 5조건 완전일치 → 필터 기반
     base_cond = build_5cond(row)
     base_df = run_filter(filtered_df, base_cond)
     base_dist = distribution(base_df)
 
-    # 동일리그 5조건
+    # 동일리그 5조건 → 필터 기반
     league_cond = build_league_cond(row)
     league_df = run_filter(filtered_df, league_cond)
     league_dist = distribution(league_df)
@@ -822,7 +806,7 @@ def detail(
     """
 
 # =====================================================
-# Page3 - 팀 분석
+# Page3 - 팀 분석 (홈/원정 분리 + 필터 기반 + 막대그래프)
 # =====================================================
 
 @app.get("/page3", response_class=HTMLResponse)
@@ -924,7 +908,7 @@ def page3(
 
 
 # =====================================================
-# Page4 - 배당 분석
+# Page4 - 배당 분석 (필터 기반 + 3열 EV + 접기 + 막대그래프)
 # =====================================================
 
 @app.get("/page4", response_class=HTMLResponse)
