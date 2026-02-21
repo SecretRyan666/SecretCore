@@ -41,6 +41,7 @@ LEDGER = []
 
 DIST_CACHE = {}
 SECRET_CACHE = {}
+STRATEGY_HISTORY_FILE = "strategy_history.json"
 
 # =====================================================
 # 5조건 사전 분포 캐시 (속도 개선)
@@ -1374,6 +1375,218 @@ def strategy1():
         "port4": port4,
         "total_combos": len(combos)
     }
+
+# =====================================================
+# Strategy2 - 10x10 = 100조합
+# =====================================================
+
+@app.get("/strategy2")
+def strategy2():
+
+    df = CURRENT_DF
+    if df.empty:
+        return []
+
+    base_df = df[
+        (df.iloc[:, COL_RESULT] == "경기전") &
+        (
+            (df.iloc[:, COL_TYPE] == "일반") |
+            (df.iloc[:, COL_TYPE] == "핸디1")
+        )
+    ]
+
+    candidates = []
+
+    for _, row in base_df.iterrows():
+
+        brain = secret_pick_brain(row, df)
+
+        candidates.append({
+            "no": row.iloc[COL_NO],
+            "home": row.iloc[COL_HOME],
+            "away": row.iloc[COL_AWAY],
+            "pick": brain["추천"],
+            "confidence": brain["confidence"],
+            "odds": float(row.iloc[COL_WIN_ODDS])
+                    if brain["추천"] == "승"
+                    else float(row.iloc[COL_DRAW_ODDS])
+                    if brain["추천"] == "무"
+                    else float(row.iloc[COL_LOSE_ODDS])
+        })
+
+    # confidence 기준 정렬
+    candidates.sort(key=lambda x: x["confidence"], reverse=True)
+
+    if len(candidates) < 20:
+        return {"error":"경기 수 부족"}
+
+    port1 = candidates[0:10]
+    port2 = candidates[10:20]
+
+    combos = []
+
+    for a in port1:
+        for b in port2:
+            combos.append({
+                "match1": a,
+                "match2": b,
+                "combo_odds": round(
+                    a["odds"] * b["odds"], 2
+                )
+            })
+
+    return {
+        "port1": port1,
+        "port2": port2,
+        "total_combos": len(combos)
+    }
+
+# =====================================================
+# 전략 결과 평가 + ROI 계산
+# =====================================================
+
+import json
+
+def evaluate_strategy1():
+
+    df = CURRENT_DF
+    if df.empty:
+        return None
+
+    strategy = strategy1()
+    if "error" in strategy:
+        return None
+
+    ports = [
+        strategy["port1"],
+        strategy["port2"],
+        strategy["port3"],
+        strategy["port4"]
+    ]
+
+    hit_counts = []
+
+    for port in ports:
+        hits = 0
+        for item in port:
+            row = df[df.iloc[:, COL_NO] == item["no"]]
+            if not row.empty:
+                result = row.iloc[0][COL_RESULT]
+                if result == item["pick"]:
+                    hits += 1
+        hit_counts.append(hits)
+
+    a,b,c,d = hit_counts
+    success_combos = a*b*c*d
+
+    total_invest = 81 * 1000
+    total_profit = 0
+
+    if success_combos > 0:
+        for p1 in ports[0]:
+            for p2 in ports[1]:
+                for p3 in ports[2]:
+                    for p4 in ports[3]:
+                        rows = [
+                            df[df.iloc[:, COL_NO]==p1["no"]],
+                            df[df.iloc[:, COL_NO]==p2["no"]],
+                            df[df.iloc[:, COL_NO]==p3["no"]],
+                            df[df.iloc[:, COL_NO]==p4["no"]],
+                        ]
+                        if all(not r.empty and r.iloc[0][COL_RESULT]==pick["pick"]
+                               for r,pick in zip(rows,[p1,p2,p3,p4])):
+                            total_profit += (
+                                p1["odds"] *
+                                p2["odds"] *
+                                p3["odds"] *
+                                p4["odds"] * 1000
+                            )
+
+    net = total_profit - total_invest
+    roi = round(net/total_invest*100,1)
+
+    return {
+        "strategy":"strategy1",
+        "hits":hit_counts,
+        "success_combos":success_combos,
+        "total_invest":total_invest,
+        "total_profit":round(total_profit,0),
+        "net":round(net,0),
+        "roi":roi
+    }
+
+def evaluate_strategy2():
+
+    df = CURRENT_DF
+    if df.empty:
+        return None
+
+    strategy = strategy2()
+    if "error" in strategy:
+        return None
+
+    port1 = strategy["port1"]
+    port2 = strategy["port2"]
+
+    hit1 = []
+    hit2 = []
+
+    for item in port1:
+        row = df[df.iloc[:, COL_NO] == item["no"]]
+        if not row.empty and row.iloc[0][COL_RESULT]==item["pick"]:
+            hit1.append(item)
+
+    for item in port2:
+        row = df[df.iloc[:, COL_NO] == item["no"]]
+        if not row.empty and row.iloc[0][COL_RESULT]==item["pick"]:
+            hit2.append(item)
+
+    success_combos = len(hit1) * len(hit2)
+
+    total_invest = 100 * 1000
+    total_profit = 0
+
+    for a in hit1:
+        for b in hit2:
+            total_profit += a["odds"] * b["odds"] * 1000
+
+    net = total_profit - total_invest
+    roi = round(net/total_invest*100,1)
+
+    return {
+        "strategy":"strategy2",
+        "hit1":len(hit1),
+        "hit2":len(hit2),
+        "success_combos":success_combos,
+        "total_invest":total_invest,
+        "total_profit":round(total_profit,0),
+        "net":round(net,0),
+        "roi":roi
+    }
+
+@app.get("/evaluate")
+def evaluate():
+
+    s1 = evaluate_strategy1()
+    s2 = evaluate_strategy2()
+
+    record = {
+        "strategy1": s1,
+        "strategy2": s2
+    }
+
+    if os.path.exists(STRATEGY_HISTORY_FILE):
+        with open(STRATEGY_HISTORY_FILE,"r") as f:
+            history = json.load(f)
+    else:
+        history = []
+
+    history.append(record)
+
+    with open(STRATEGY_HISTORY_FILE,"w") as f:
+        json.dump(history,f,indent=2)
+
+    return record
 
 # =====================================================
 # 실행부
