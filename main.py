@@ -108,7 +108,7 @@ def apply_filters(df, type, homeaway, general, dir, handi):
     return df
 
 # =====================================================
-# 조건 텍스트 생성
+# 조건 텍스트 생성 (기본조건 제거 반영)
 # =====================================================
 
 def filter_text(type, homeaway, general, dir, handi):
@@ -121,7 +121,7 @@ def filter_text(type, homeaway, general, dir, handi):
     if dir: parts.append(f"정역={dir}")
     if handi: parts.append(f"핸디={handi}")
 
-    return " · ".join(parts) if parts else "기본조건"
+    return " · ".join(parts)
 
 # =====================================================
 # run_filter
@@ -311,7 +311,7 @@ def upload(file: UploadFile = File(...)):
 
     CURRENT_DF = df
 
-    # 캐시 초기화 (중요)
+    # 🔥 캐시 완전 초기화
     DIST_CACHE.clear()
     SECRET_CACHE.clear()
 
@@ -362,7 +362,7 @@ def health():
 
 # =====================================================
 # 필터 값 추출 API (Page1 모달용)
-# 동적 데이터 기반
+# 🔥 경기전 고정 필터 반영
 # =====================================================
 
 @app.get("/filters")
@@ -373,6 +373,9 @@ def filters():
     if df.empty:
         return {}
 
+    # 경기전만 기준으로 필터 목록 생성
+    df = df[df.iloc[:, COL_RESULT] == "경기전"]
+
     return {
         "type": sorted(df.iloc[:, COL_TYPE].dropna().unique().tolist()),
         "homeaway": sorted(df.iloc[:, COL_HOMEAWAY].dropna().unique().tolist()),
@@ -382,7 +385,7 @@ def filters():
     }
 
 # =====================================================
-# Page1 - 메인 (PRO UI + 다중필터 + 조건표시줄)
+# Page1 - 메인 (년도/회차 표시 + 다중필터 + 시크릿픽 표시)
 # =====================================================
 
 @app.get("/", response_class=HTMLResponse)
@@ -404,50 +407,68 @@ def home():
         </html>
         """
 
-    return """
+    # 현재 년도 / 회차 추출 (경기전 기준)
+    year = ""
+    round_val = ""
+
+    if not CURRENT_DF.empty:
+        df_pre = CURRENT_DF[CURRENT_DF.iloc[:, COL_RESULT] == "경기전"]
+        if not df_pre.empty:
+            year = df_pre.iloc[0, COL_YEAR]
+            round_val = df_pre.iloc[0, COL_ROUND]
+
+    return f"""
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
-body{background:#0f1720;color:white;font-family:Arial;margin:0;}
+body{{background:#0f1720;color:white;font-family:Arial;margin:0;}}
 
-.header{
+.header{{
 display:flex;justify-content:space-between;align-items:center;
 padding:14px 18px;background:#111827;position:sticky;top:0;z-index:50;
-}
+}}
 
-.logo{font-weight:700;font-size:18px;color:#38bdf8;}
-.top-icons{display:flex;gap:18px;font-size:18px;cursor:pointer;}
+.logo{{font-weight:700;font-size:18px;color:#38bdf8;}}
 
-.card{
+.top-icons{{display:flex;gap:18px;font-size:18px;cursor:pointer;}}
+
+.card{{
 background:#1e293b;margin:14px;padding:18px;
 border-radius:18px;position:relative;
 box-shadow:0 4px 12px rgba(0,0,0,0.3);
-}
+}}
 
-.info-btn{position:absolute;right:14px;top:12px;font-size:12px;}
-.star-btn{position:absolute;right:14px;top:40px;font-size:18px;color:#6b7280;}
-.star-active{color:#facc15;}
+.secret-badge{{
+position:absolute;
+right:18px;
+top:50%;
+transform:translateY(-50%);
+font-weight:bold;
+color:#22c55e;
+}}
 
-.bottom-nav{
+.info-btn{{position:absolute;right:14px;top:12px;font-size:12px;}}
+.star-btn{{position:absolute;right:14px;top:40px;font-size:18px;color:#6b7280;}}
+.star-active{{color:#facc15;}}
+
+.bottom-nav{{
 position:fixed;bottom:0;width:100%;
 background:#111827;display:flex;
 justify-content:space-around;padding:12px 0;font-size:20px;
-}
+}}
 
-.modal{
+.modal{{
 display:none;position:fixed;top:0;left:0;width:100%;height:100%;
 background:rgba(0,0,0,0.6);justify-content:center;align-items:center;
-}
+}}
 
-.modal-content{
+.modal-content{{
 background:#1e293b;padding:20px;border-radius:16px;
 width:340px;max-height:80vh;overflow:auto;
-}
+}}
 
-.checkbox-group{
-margin-bottom:12px;
-}
+.checkbox-group{{margin-bottom:12px;}}
 </style>
 </head>
 <body>
@@ -462,10 +483,10 @@ margin-bottom:12px;
     </div>
 </div>
 
-<div id="conditionBar"
-style="padding:8px 16px;font-size:12px;
-opacity:0.8;border-bottom:1px solid #1e293b;">
-기본조건
+<div style="padding:8px 16px;
+            font-size:14px;
+            border-bottom:1px solid #1e293b;">
+{year}년 {round_val}회차
 </div>
 
 <div id="list" style="padding-bottom:100px;"></div>
@@ -489,80 +510,66 @@ opacity:0.8;border-bottom:1px solid #1e293b;">
 
 <script>
 
-function resetFilters(){
+function resetFilters(){{
     window.location.href="/";
-}
+}}
 
-function openModal(){
+function openModal(){{
     document.getElementById("filterModal").style.display="flex";
     loadFilters();
-}
+}}
 
-function closeModal(){
+function closeModal(){{
     document.getElementById("filterModal").style.display="none";
-}
+}}
 
-async function loadFilters(){
+async function loadFilters(){{
     let res = await fetch("/filters");
     let data = await res.json();
 
     let html="";
 
-    for(let key in data){
+    for(let key in data){{
         html += "<div class='checkbox-group'><b>"+key+"</b><br>";
-        data[key].forEach(v=>{
+        data[key].forEach(v=>{{
             html += `<label>
-            <input type="checkbox" name="${key}" value="${v}"> ${v}
+            <input type="checkbox" name="${{key}}" value="${{v}}"> ${{v}}
             </label><br>`;
-        });
+        }});
         html += "</div>";
-    }
+    }}
 
     document.getElementById("filterArea").innerHTML = html;
-}
+}}
 
-function applyFilters(){
-
+function applyFilters(){{
     let params = new URLSearchParams();
 
     document.querySelectorAll("#filterArea input:checked")
-    .forEach(el=>{
-        if(params.has(el.name)){
+    .forEach(el=>{{
+        if(params.has(el.name)){{
             params.set(el.name,
                 params.get(el.name)+","+el.value);
-        }else{
+        }}else{{
             params.set(el.name, el.value);
-        }
-    });
+        }}
+    }});
 
     window.location.href = "/?" + params.toString();
-}
+}}
 
-function updateConditionBar(){
-    let params = new URLSearchParams(window.location.search);
-    let text = "기본조건: 경기전 · 일반/핸디1";
-
-    params.forEach((v,k)=>{
-        text += " · " + k + "=" + v;
-    });
-
-    document.getElementById("conditionBar").innerText = text;
-}
-
-async function toggleFav(home,away,el){
-    let res = await fetch("/fav-toggle",{
+async function toggleFav(home,away,el){{
+    let res = await fetch("/fav-toggle",{{
         method:"POST",
-        headers:{"Content-Type":"application/x-www-form-urlencoded"},
-        body:`home=${home}&away=${away}`
-    });
+        headers:{{"Content-Type":"application/x-www-form-urlencoded"}},
+        body:`home=${{home}}&away=${{away}}`
+    }});
     let data = await res.json();
     if(data.status=="added") el.classList.add("star-active");
     else el.classList.remove("star-active");
-}
+}}
 
-async function load(){
-
-    updateConditionBar();
+async function load(){{
 
     let params = new URLSearchParams(window.location.search);
     let r = await fetch('/matches?' + params.toString());
@@ -570,28 +577,27 @@ async function load(){
 
     let html="";
 
-    data.forEach(function(m){
+    data.forEach(function(m){{
 
         let row = m.row;
-        let badge = m.secret ?
-        "<div style='color:#22c55e;font-weight:bold;margin-bottom:6px;'>SECRET</div>" : "";
+        let secret = m.secret ? "<div class='secret-badge'>시크릿픽</div>" : "";
 
         html+=`
         <div class="card">
-        ${badge}
-        <div><b>${row[6]}</b> vs <b>${row[7]}</b></div>
-        <div>승 ${row[8]} | 무 ${row[9]} | 패 ${row[10]}</div>
-        <div>${row[14]} · ${row[16]} · ${row[11]} · ${row[15]} · ${row[12]}</div>
+        ${{secret}}
+        <div><b>${{row[6]}}</b> vs <b>${{row[7]}}</b></div>
+        <div>승 ${{row[8]}} | 무 ${{row[9]}} | 패 ${{row[10]}}</div>
+        <div>${{row[14]}} · ${{row[16]}} · ${{row[11]}} · ${{row[15]}} · ${{row[12]}}</div>
         <div class="info-btn">
-            <a href="/detail?no=${row[0]}" style="color:#38bdf8;">정보</a>
+            <a href="/detail?no=${{row[0]}}&${{params.toString()}}" style="color:#38bdf8;">정보</a>
         </div>
         <div class="star-btn"
-        onclick="toggleFav('${row[6]}','${row[7]}',this)">★</div>
+        onclick="toggleFav('${{row[6]}}','${{row[7]}}',this)">★</div>
         </div>`;
-    });
+    }});
 
     document.getElementById("list").innerHTML = html;
-}
+}}
 
 load();
 </script>
@@ -599,9 +605,9 @@ load();
 </html>
 """
 
-
 # =====================================================
-# 경기목록 API (다중필터 + SECRET 최적화)
+# 경기목록 API
+# 경기전 고정 + 기본유형(일반/핸디1) + 다중필터 + SECRET 최적화
 # =====================================================
 
 @app.get("/matches")
@@ -614,9 +620,13 @@ def matches(
 ):
 
     df = CURRENT_DF
+
     if df.empty:
         return []
 
+    # -------------------------------------------------
+    # 🔒 경기전 고정 + 기본유형 고정
+    # -------------------------------------------------
     base_df = df[
         (df.iloc[:, COL_RESULT] == "경기전") &
         (
@@ -625,15 +635,27 @@ def matches(
         )
     ]
 
+    # -------------------------------------------------
+    # 🔥 다중필터 AND 적용
+    # -------------------------------------------------
     base_df = apply_filters(
-        base_df, type, homeaway, general, dir, handi
+        base_df,
+        type,
+        homeaway,
+        general,
+        dir,
+        handi
     )
 
     result = []
 
+    # -------------------------------------------------
+    # 🔥 SECRET 조합 캐싱 기반 처리
+    # -------------------------------------------------
     for _, row in base_df.iterrows():
 
         data = row.values.tolist()
+
         sec = secret_score_fast(row, df)
 
         is_secret = bool(
@@ -650,7 +672,7 @@ def matches(
     return result
 
 # =====================================================
-# PRO 막대그래프
+# PRO 막대그래프 (퍼센트 숫자 포함)
 # =====================================================
 
 def bar_html(percent, mode="win"):
@@ -662,17 +684,20 @@ def bar_html(percent, mode="win"):
     }
 
     return f"""
-    <div style="width:100%;background:rgba(255,255,255,0.08);
-                border-radius:999px;height:14px;margin:6px 0;">
-        <div style="width:{percent}%;
-                    background:{color_map[mode]};
-                    height:100%;
-                    border-radius:999px;"></div>
+    <div style="margin:6px 0;">
+        <div style="font-size:12px;opacity:0.8;">{percent}%</div>
+        <div style="width:100%;background:rgba(255,255,255,0.08);
+                    border-radius:999px;height:14px;">
+            <div style="width:{percent}%;
+                        background:{color_map[mode]};
+                        height:100%;
+                        border-radius:999px;"></div>
+        </div>
     </div>
     """
 
 # =====================================================
-# Page2 - 상세 분석 (필터 기반 분포 + 시크릿픽)
+# Page2 - 상세 분석
 # =====================================================
 
 @app.get("/detail", response_class=HTMLResponse)
@@ -698,94 +723,52 @@ def detail(
 
     row = row_df.iloc[0]
 
-    home   = row.iloc[COL_HOME]
-    away   = row.iloc[COL_AWAY]
-    league = row.iloc[COL_LEAGUE]
+    filtered_df = apply_filters(df, type, homeaway, general, dir, handi)
 
-    # =========================
-    # 필터 적용
-    # =========================
-
-    filtered_df = apply_filters(
-        df, type, homeaway, general, dir, handi
-    )
-
-    # 5조건 완전일치 → 필터 기반
     base_cond = build_5cond(row)
     base_df = run_filter(filtered_df, base_cond)
     base_dist = distribution(base_df)
 
-    # 동일리그 5조건 → 필터 기반
     league_cond = build_league_cond(row)
     league_df = run_filter(filtered_df, league_cond)
     league_dist = distribution(league_df)
 
-    # 시크릿픽
     secret_data = safe_ev(base_dist, row)
 
-    condition_str = filter_text(
-        type, homeaway, general, dir, handi
-    )
+    condition_str = filter_text(type, homeaway, general, dir, handi)
 
     return f"""
-    <html>
-    <body style="background:#0f1720;color:white;
-                 font-family:Arial;padding:20px;">
+    <html><body style="background:#0f1720;color:white;padding:20px;font-family:Arial;">
 
-    <h2>[{league}] {home} vs {away}</h2>
+    <h2>{row.iloc[COL_HOME]} vs {row.iloc[COL_AWAY]}</h2>
 
-    <div style="opacity:0.7;font-size:12px;margin-bottom:15px;">
-    현재 필터: {condition_str}
+    <div style="font-size:12px;opacity:0.7;margin-bottom:10px;">
+    적용조건: {condition_str if condition_str else "없음"}
     </div>
-
-    승 {row.iloc[COL_WIN_ODDS]} /
-    무 {row.iloc[COL_DRAW_ODDS]} /
-    패 {row.iloc[COL_LOSE_ODDS]}
-
-    <br><br>
 
     <div style="display:flex;gap:20px;">
 
-    <!-- 5조건 -->
-    <div style="flex:1;background:#1e293b;
-                padding:16px;border-radius:16px;">
+        <div style="flex:1;background:#1e293b;padding:16px;border-radius:16px;">
+        <h3>5조건 완전일치</h3>
+        총 {base_dist["총"]}경기
+        {bar_html(base_dist["wp"],"win")}
+        {bar_html(base_dist["dp"],"draw")}
+        {bar_html(base_dist["lp"],"lose")}
+        </div>
 
-    <h3>5조건 완전일치</h3>
-    총 {base_dist["총"]}경기
-
-    <div>승 {base_dist["wp"]}%</div>
-    {bar_html(base_dist["wp"],"win")}
-
-    <div>무 {base_dist["dp"]}%</div>
-    {bar_html(base_dist["dp"],"draw")}
-
-    <div>패 {base_dist["lp"]}%</div>
-    {bar_html(base_dist["lp"],"lose")}
-    </div>
-
-    <!-- 동일리그 -->
-    <div style="flex:1;background:#1e293b;
-                padding:16px;border-radius:16px;">
-
-    <h3>동일리그 5조건</h3>
-    총 {league_dist["총"]}경기
-
-    <div>승 {league_dist["wp"]}%</div>
-    {bar_html(league_dist["wp"],"win")}
-
-    <div>무 {league_dist["dp"]}%</div>
-    {bar_html(league_dist["dp"],"draw")}
-
-    <div>패 {league_dist["lp"]}%</div>
-    {bar_html(league_dist["lp"],"lose")}
-    </div>
+        <div style="flex:1;background:#1e293b;padding:16px;border-radius:16px;">
+        <h3>동일리그 5조건</h3>
+        총 {league_dist["총"]}경기
+        {bar_html(league_dist["wp"],"win")}
+        {bar_html(league_dist["dp"],"draw")}
+        {bar_html(league_dist["lp"],"lose")}
+        </div>
 
     </div>
 
-    <br><br>
+    <br>
 
-    <div style="background:#1e293b;
-                padding:16px;border-radius:16px;">
+    <div style="background:#1e293b;padding:16px;border-radius:16px;">
     <h3>시크릿픽</h3>
     추천: <b>{secret_data["추천"]}</b><br>
     승 EV: {secret_data["EV"]["승"]}<br>
@@ -794,19 +777,18 @@ def detail(
     </div>
 
     <br><br>
-
-    <a href="/page3?no={no}">홈팀 분석</a><br>
+    <a href="/page3?no={no}&{f'type={type}&' if type else ''}{f'homeaway={homeaway}&' if homeaway else ''}{f'general={general}&' if general else ''}{f'dir={dir}&' if dir else ''}{f'handi={handi}' if handi else ''}">홈팀 분석</a><br>
     <a href="/page3?no={no}&away=1">원정팀 분석</a><br>
     <a href="/page4?no={no}">배당 분석</a>
 
     <br><br>
     <button onclick="history.back()">← 뒤로</button>
-    </body>
-    </html>
+
+    </body></html>
     """
 
 # =====================================================
-# Page3 - 팀 분석 (홈/원정 분리 + 필터 기반 + 막대그래프)
+# Page3 - 팀 분석
 # =====================================================
 
 @app.get("/page3", response_class=HTMLResponse)
@@ -821,24 +803,15 @@ def page3(
 ):
 
     if not no:
-        return "<h2>잘못된 접근</h2>"
+        return "잘못된 접근"
 
     df = CURRENT_DF
-    if df.empty:
-        return "<h2>데이터 없음</h2>"
-
-    row_df = df[df.iloc[:, COL_NO] == str(no)]
-    if row_df.empty:
-        return "<h2>경기 없음</h2>"
-
-    row = row_df.iloc[0]
+    row = df[df.iloc[:, COL_NO] == str(no)].iloc[0]
 
     team = row.iloc[COL_AWAY] if away else row.iloc[COL_HOME]
     team_type = "원정팀 분석" if away else "홈팀 분석"
 
-    filtered_df = apply_filters(
-        df, type, homeaway, general, dir, handi
-    )
+    filtered_df = apply_filters(df, type, homeaway, general, dir, handi)
 
     team_df = filtered_df[
         (filtered_df.iloc[:, COL_HOME] == team) |
@@ -855,60 +828,45 @@ def page3(
     condition_str = filter_text(type, homeaway, general, dir, handi)
 
     return f"""
-    <html>
-    <body style="background:#0f1720;color:white;
-                 font-family:Arial;padding:20px;">
+    <html><body style="background:#0f1720;color:white;padding:20px;font-family:Arial;">
 
     <h2>{team} {team_type}</h2>
 
-    <div style="opacity:0.7;font-size:12px;margin-bottom:15px;">
-    현재 필터: {condition_str}
+    <div style="font-size:12px;opacity:0.7;">
+    적용조건: {condition_str if condition_str else "없음"}
     </div>
 
-    <details open>
-    <summary><b>전체 통계</b></summary>
+    <br>
+
+    <div style="background:#1e293b;padding:16px;border-radius:16px;">
     총 {all_dist["총"]}경기
     {bar_html(all_dist["wp"],"win")}
     {bar_html(all_dist["dp"],"draw")}
     {bar_html(all_dist["lp"],"lose")}
-    </details>
+    </div>
 
     <br>
-
-    <details>
-    <summary><b>홈 vs 원정 비교</b></summary>
 
     <div style="display:flex;gap:12px;">
+        <div style="flex:1;background:#1e293b;padding:12px;border-radius:12px;">
+        <b>홈</b>
+        {bar_html(home_dist["wp"],"win")}
+        </div>
 
-    <div style="flex:1;background:#1e293b;padding:12px;border-radius:12px;">
-    <b>홈</b><br>
-    총 {home_dist["총"]}경기
-    {bar_html(home_dist["wp"],"win")}
-    {bar_html(home_dist["dp"],"draw")}
-    {bar_html(home_dist["lp"],"lose")}
+        <div style="flex:1;background:#1e293b;padding:12px;border-radius:12px;">
+        <b>원정</b>
+        {bar_html(away_dist["wp"],"win")}
+        </div>
     </div>
 
-    <div style="flex:1;background:#1e293b;padding:12px;border-radius:12px;">
-    <b>원정</b><br>
-    총 {away_dist["총"]}경기
-    {bar_html(away_dist["wp"],"win")}
-    {bar_html(away_dist["dp"],"draw")}
-    {bar_html(away_dist["lp"],"lose")}
-    </div>
-
-    </div>
-
-    </details>
-
-    <br>
+    <br><br>
     <button onclick="history.back()">← 뒤로</button>
-    </body>
-    </html>
+
+    </body></html>
     """
 
-
 # =====================================================
-# Page4 - 배당 분석 (필터 기반 + 3열 EV + 접기 + 막대그래프)
+# Page4 - 배당 분석
 # =====================================================
 
 @app.get("/page4", response_class=HTMLResponse)
@@ -922,21 +880,12 @@ def page4(
 ):
 
     if not no:
-        return "<h2>잘못된 접근</h2>"
+        return "잘못된 접근"
 
     df = CURRENT_DF
-    if df.empty:
-        return "<h2>데이터 없음</h2>"
+    row = df[df.iloc[:, COL_NO] == str(no)].iloc[0]
 
-    row_df = df[df.iloc[:, COL_NO] == str(no)]
-    if row_df.empty:
-        return "<h2>경기 없음</h2>"
-
-    row = row_df.iloc[0]
-
-    filtered_df = apply_filters(
-        df, type, homeaway, general, dir, handi
-    )
+    filtered_df = apply_filters(df, type, homeaway, general, dir, handi)
 
     win_str  = row.iloc[COL_WIN_ODDS]
     draw_str = row.iloc[COL_DRAW_ODDS]
@@ -948,112 +897,28 @@ def page4(
         (filtered_df.iloc[:, COL_LOSE_ODDS] == lose_str)
     ]
 
-    win_df  = filtered_df[filtered_df.iloc[:, COL_WIN_ODDS] == win_str]
-    draw_df = filtered_df[filtered_df.iloc[:, COL_DRAW_ODDS] == draw_str]
-    lose_df = filtered_df[filtered_df.iloc[:, COL_LOSE_ODDS] == lose_str]
-
     exact_dist = distribution(exact_df)
-    win_dist   = distribution(win_df)
-    draw_dist  = distribution(draw_df)
-    lose_dist  = distribution(lose_df)
-
-    win_ev  = safe_ev(win_dist,  row)
-    draw_ev = safe_ev(draw_dist, row)
-    lose_ev = safe_ev(lose_dist, row)
 
     condition_str = filter_text(type, homeaway, general, dir, handi)
 
     return f"""
-    <html>
-    <body style="background:#0f1720;color:white;
-                 font-family:Arial;padding:20px;">
+    <html><body style="background:#0f1720;color:white;padding:20px;font-family:Arial;">
 
     <h2>배당 분석</h2>
 
-    <div style="opacity:0.7;font-size:12px;margin-bottom:15px;">
-    현재 필터: {condition_str}
+    <div style="font-size:12px;opacity:0.7;">
+    적용조건: {condition_str if condition_str else "없음"}
     </div>
 
-    승 {win_str} / 무 {draw_str} / 패 {lose_str}
+    <br>
 
-    <br><br>
-
-    <h3>완전일치</h3>
     총 {exact_dist["총"]}경기
     {bar_html(exact_dist["wp"],"win")}
     {bar_html(exact_dist["dp"],"draw")}
     {bar_html(exact_dist["lp"],"lose")}
 
     <br><br>
-
-    <div style="display:flex;gap:12px;">
-
-    <div style="flex:1;background:#1e293b;padding:12px;border-radius:12px;">
-    <b>승 EV</b><br>
-    추천: {win_ev["추천"]}<br>
-    {win_ev["EV"]["승"]}
-    </div>
-
-    <div style="flex:1;background:#1e293b;padding:12px;border-radius:12px;">
-    <b>무 EV</b><br>
-    추천: {draw_ev["추천"]}<br>
-    {draw_ev["EV"]["무"]}
-    </div>
-
-    <div style="flex:1;background:#1e293b;padding:12px;border-radius:12px;">
-    <b>패 EV</b><br>
-    추천: {lose_ev["추천"]}<br>
-    {lose_ev["EV"]["패"]}
-    </div>
-
-    </div>
-
-    <br><br>
-
-    <details>
-    <summary><b>승 동일 통계</b></summary>
-    총 {win_dist["총"]}경기
-    {bar_html(win_dist["wp"],"win")}
-    {bar_html(win_dist["dp"],"draw")}
-    {bar_html(win_dist["lp"],"lose")}
-    </details>
-
-    <br>
-
-    <details>
-    <summary><b>무 동일 통계</b></summary>
-    총 {draw_dist["총"]}경기
-    {bar_html(draw_dist["wp"],"win")}
-    {bar_html(draw_dist["dp"],"draw")}
-    {bar_html(draw_dist["lp"],"lose")}
-    </details>
-
-    <br>
-
-    <details>
-    <summary><b>패 동일 통계</b></summary>
-    총 {lose_dist["총"]}경기
-    {bar_html(lose_dist["wp"],"win")}
-    {bar_html(lose_dist["dp"],"draw")}
-    {bar_html(lose_dist["lp"],"lose")}
-    </details>
-
-    <br><br>
     <button onclick="history.back()">← 뒤로</button>
-    </body>
-    </html>
+
+    </body></html>
     """
-
-
-# =====================================================
-# 실행부
-# =====================================================
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(
-        "main:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=True
-    )
