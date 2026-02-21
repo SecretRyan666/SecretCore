@@ -590,6 +590,85 @@ def matches(
     }
 
 # =====================================================
+# 즐겨찾기 토글
+# =====================================================
+
+@app.post("/fav-toggle")
+def fav_toggle(home: str = Form(...), away: str = Form(...)):
+
+    global FAVORITES
+
+    key = f"{home}__{away}"
+
+    if key in FAVORITES:
+        FAVORITES.remove(key)
+        return {"status": "removed"}
+    else:
+        FAVORITES.append(key)
+        return {"status": "added"}
+
+# =====================================================
+# Ledger
+# =====================================================
+
+@app.get("/ledger", response_class=HTMLResponse)
+def ledger_page():
+    return """
+    <html><body style='background:#0f1720;color:white;padding:30px;'>
+    <h2>📊 Ledger</h2>
+    <p>준비중입니다.</p>
+    <button onclick="history.back()">← 뒤로</button>
+    </body></html>
+    """
+
+# =====================================================
+# Memo
+# =====================================================
+
+@app.get("/memo", response_class=HTMLResponse)
+def memo_page():
+    return """
+    <html><body style='background:#0f1720;color:white;padding:30px;'>
+    <h2>📝 Memo</h2>
+    <p>준비중입니다.</p>
+    <button onclick="history.back()">← 뒤로</button>
+    </body></html>
+    """
+
+# =====================================================
+# Capture
+# =====================================================
+
+@app.get("/capture", response_class=HTMLResponse)
+def capture_page():
+    return """
+    <html><body style='background:#0f1720;color:white;padding:30px;'>
+    <h2>📸 Capture</h2>
+    <p>준비중입니다.</p>
+    <button onclick="history.back()">← 뒤로</button>
+    </body></html>
+    """
+
+# =====================================================
+# Favorites
+# =====================================================
+
+@app.get("/favorites", response_class=HTMLResponse)
+def favorites_page():
+
+    global FAVORITES
+
+    items = "<br>".join(FAVORITES) if FAVORITES else "없음"
+
+    return f"""
+    <html><body style='background:#0f1720;color:white;padding:30px;'>
+    <h2>⭐ Favorites</h2>
+    <p>{items}</p>
+    <button onclick="history.back()">← 뒤로</button>
+    </body></html>
+    """
+
+# =====================================================
 # PRO 막대그래프
 # =====================================================
 
@@ -610,7 +689,6 @@ def bar_html(percent, mode="win"):
                     border-radius:999px;"></div>
     </div>
     """
-
 
 # =====================================================
 # Page2 - 상세 분석
