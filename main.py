@@ -373,6 +373,9 @@ def filters():
     if df.empty:
         return {}
 
+    # 🔥 경기전만 기준으로 필터 목록 생성
+    df = df[df.iloc[:, COL_RESULT] == "경기전"]
+
     return {
         "type": sorted(df.iloc[:, COL_TYPE].dropna().unique().tolist()),
         "homeaway": sorted(df.iloc[:, COL_HOMEAWAY].dropna().unique().tolist()),
@@ -862,15 +865,14 @@ def detail(
     <h3>5조건 완전일치</h3>
     총 {base_dist["총"]}경기
 
-    <div>승 {base_dist["wp"]}%</div>
-    {bar_html(base_dist["wp"],"win")}
+    <div>승 {base_dist["wp"]}% ({base_dist["승"]}경기)</div>
+{bar_html(base_dist["wp"],"win")}
 
-    <div>무 {base_dist["dp"]}%</div>
-    {bar_html(base_dist["dp"],"draw")}
+<div>무 {base_dist["dp"]}% ({base_dist["무"]}경기)</div>
+{bar_html(base_dist["dp"],"draw")}
 
-    <div>패 {base_dist["lp"]}%</div>
-    {bar_html(base_dist["lp"],"lose")}
-    </div>
+<div>패 {base_dist["lp"]}% ({base_dist["패"]}경기)</div>
+{bar_html(base_dist["lp"],"lose")}
 
     <!-- 동일리그 -->
     <div style="flex:1;background:#1e293b;
@@ -879,15 +881,14 @@ def detail(
     <h3>동일리그 5조건</h3>
     총 {league_dist["총"]}경기
 
-    <div>승 {league_dist["wp"]}%</div>
-    {bar_html(league_dist["wp"],"win")}
+    <div>승 {base_dist["wp"]}% ({base_dist["승"]}경기)</div>
+{bar_html(base_dist["wp"],"win")}
 
-    <div>무 {league_dist["dp"]}%</div>
-    {bar_html(league_dist["dp"],"draw")}
+<div>무 {base_dist["dp"]}% ({base_dist["무"]}경기)</div>
+{bar_html(base_dist["dp"],"draw")}
 
-    <div>패 {league_dist["lp"]}%</div>
-    {bar_html(league_dist["lp"],"lose")}
-    </div>
+<div>패 {base_dist["lp"]}% ({base_dist["패"]}경기)</div>
+{bar_html(base_dist["lp"],"lose")}
 
     </div>
 
@@ -977,9 +978,15 @@ def page3(
     <details open>
     <summary><b>전체 통계</b></summary>
     총 {all_dist["총"]}경기
-    {bar_html(all_dist["wp"],"win")}
-    {bar_html(all_dist["dp"],"draw")}
-    {bar_html(all_dist["lp"],"lose")}
+
+<div>승 {all_dist["wp"]}% ({all_dist["승"]}경기)</div>
+{bar_html(all_dist["wp"],"win")}
+
+<div>무 {all_dist["dp"]}% ({all_dist["무"]}경기)</div>
+{bar_html(all_dist["dp"],"draw")}
+
+<div>패 {all_dist["lp"]}% ({all_dist["패"]}경기)</div>
+{bar_html(all_dist["lp"],"lose")}
     </details>
 
     <br>
@@ -991,18 +998,30 @@ def page3(
 
     <div style="flex:1;background:#1e293b;padding:12px;border-radius:12px;">
     <b>홈</b><br>
-    총 {home_dist["총"]}경기
-    {bar_html(home_dist["wp"],"win")}
-    {bar_html(home_dist["dp"],"draw")}
-    {bar_html(home_dist["lp"],"lose")}
+    총 {all_dist["총"]}경기
+
+<div>승 {all_dist["wp"]}% ({all_dist["승"]}경기)</div>
+{bar_html(all_dist["wp"],"win")}
+
+<div>무 {all_dist["dp"]}% ({all_dist["무"]}경기)</div>
+{bar_html(all_dist["dp"],"draw")}
+
+<div>패 {all_dist["lp"]}% ({all_dist["패"]}경기)</div>
+{bar_html(all_dist["lp"],"lose")}
     </div>
 
     <div style="flex:1;background:#1e293b;padding:12px;border-radius:12px;">
     <b>원정</b><br>
-    총 {away_dist["총"]}경기
-    {bar_html(away_dist["wp"],"win")}
-    {bar_html(away_dist["dp"],"draw")}
-    {bar_html(away_dist["lp"],"lose")}
+    총 {all_dist["총"]}경기
+
+<div>승 {all_dist["wp"]}% ({all_dist["승"]}경기)</div>
+{bar_html(all_dist["wp"],"win")}
+
+<div>무 {all_dist["dp"]}% ({all_dist["무"]}경기)</div>
+{bar_html(all_dist["dp"],"draw")}
+
+<div>패 {all_dist["lp"]}% ({all_dist["패"]}경기)</div>
+{bar_html(all_dist["lp"],"lose")}
     </div>
 
     </div>
@@ -1089,9 +1108,15 @@ def page4(
 
     <h3>완전일치</h3>
     총 {exact_dist["총"]}경기
-    {bar_html(exact_dist["wp"],"win")}
-    {bar_html(exact_dist["dp"],"draw")}
-    {bar_html(exact_dist["lp"],"lose")}
+
+<div>승 {exact_dist["wp"]}% ({exact_dist["승"]}경기)</div>
+{bar_html(exact_dist["wp"],"win")}
+
+<div>무 {exact_dist["dp"]}% ({exact_dist["무"]}경기)</div>
+{bar_html(exact_dist["dp"],"draw")}
+
+<div>패 {exact_dist["lp"]}% ({exact_dist["패"]}경기)</div>
+{bar_html(exact_dist["lp"],"lose")}
 
     <br><br>
 
@@ -1121,30 +1146,48 @@ def page4(
 
     <details>
     <summary><b>승 동일 통계</b></summary>
-    총 {win_dist["총"]}경기
-    {bar_html(win_dist["wp"],"win")}
-    {bar_html(win_dist["dp"],"draw")}
-    {bar_html(win_dist["lp"],"lose")}
+    총 {exact_dist["총"]}경기
+
+<div>승 {exact_dist["wp"]}% ({exact_dist["승"]}경기)</div>
+{bar_html(exact_dist["wp"],"win")}
+
+<div>무 {exact_dist["dp"]}% ({exact_dist["무"]}경기)</div>
+{bar_html(exact_dist["dp"],"draw")}
+
+<div>패 {exact_dist["lp"]}% ({exact_dist["패"]}경기)</div>
+{bar_html(exact_dist["lp"],"lose")}
     </details>
 
     <br>
 
     <details>
     <summary><b>무 동일 통계</b></summary>
-    총 {draw_dist["총"]}경기
-    {bar_html(draw_dist["wp"],"win")}
-    {bar_html(draw_dist["dp"],"draw")}
-    {bar_html(draw_dist["lp"],"lose")}
+    총 {exact_dist["총"]}경기
+
+<div>승 {exact_dist["wp"]}% ({exact_dist["승"]}경기)</div>
+{bar_html(exact_dist["wp"],"win")}
+
+<div>무 {exact_dist["dp"]}% ({exact_dist["무"]}경기)</div>
+{bar_html(exact_dist["dp"],"draw")}
+
+<div>패 {exact_dist["lp"]}% ({exact_dist["패"]}경기)</div>
+{bar_html(exact_dist["lp"],"lose")}
     </details>
 
     <br>
 
     <details>
     <summary><b>패 동일 통계</b></summary>
-    총 {lose_dist["총"]}경기
-    {bar_html(lose_dist["wp"],"win")}
-    {bar_html(lose_dist["dp"],"draw")}
-    {bar_html(lose_dist["lp"],"lose")}
+    총 {exact_dist["총"]}경기
+
+<div>승 {exact_dist["wp"]}% ({exact_dist["승"]}경기)</div>
+{bar_html(exact_dist["wp"],"win")}
+
+<div>무 {exact_dist["dp"]}% ({exact_dist["무"]}경기)</div>
+{bar_html(exact_dist["dp"],"draw")}
+
+<div>패 {exact_dist["lp"]}% ({exact_dist["패"]}경기)</div>
+{bar_html(exact_dist["lp"],"lose")}
     </details>
 
     <br><br>
