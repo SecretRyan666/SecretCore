@@ -289,6 +289,51 @@ def secret_score_fast(row, df):
     }
 
 # =====================================================
+# SecretPick Brain (SP 단독 실험용)
+# =====================================================
+def secret_pick_brain(row, df):
+
+    key = (
+        row.iloc[COL_TYPE],
+        row.iloc[COL_HOMEAWAY],
+        row.iloc[COL_GENERAL],
+        row.iloc[COL_DIR],
+        row.iloc[COL_HANDI]
+    )
+
+    # 5조건 분포 (60%)
+    p5 = FIVE_COND_DIST.get(key, {
+        "wp":0,"dp":0,"lp":0
+    })
+
+    # 배당 완전일치 분포 (40%)
+    exact_df = df[
+        (df.iloc[:, COL_WIN_ODDS]  == row.iloc[COL_WIN_ODDS]) &
+        (df.iloc[:, COL_DRAW_ODDS] == row.iloc[COL_DRAW_ODDS]) &
+        (df.iloc[:, COL_LOSE_ODDS] == row.iloc[COL_LOSE_ODDS])
+    ]
+
+    exact_dist = distribution(exact_df)
+
+    sp_w = 0.6*p5.get("wp",0) + 0.4*exact_dist.get("wp",0)
+    sp_d = 0.6*p5.get("dp",0) + 0.4*exact_dist.get("dp",0)
+    sp_l = 0.6*p5.get("lp",0) + 0.4*exact_dist.get("lp",0)
+
+    sp_map = {
+        "승": round(sp_w,2),
+        "무": round(sp_d,2),
+        "패": round(sp_l,2)
+    }
+
+    best = max(sp_map, key=sp_map.get)
+
+    return {
+        "추천": best,
+        "확률": sp_map,
+        "confidence": round(sp_map[best]/100,3)
+    }
+
+# =====================================================
 # 로그인
 # =====================================================
 
@@ -723,6 +768,7 @@ def matches(
 
         data = row.values.tolist()
         sec = secret_score_fast(row, df)
+        brain = secret_pick_brain(row, df)
 
         is_secret = bool(
             sec["score"] > 0.05 and
@@ -733,7 +779,9 @@ def matches(
         result.append({
     "row": list(map(str, data)),
     "secret": is_secret,
-    "pick": sec["추천"] if is_secret else ""
+    "pick": sec["추천"] if is_secret else "",
+    "sp_pick": brain["추천"],
+    "confidence": brain["confidence"]
 })
 
     return result
