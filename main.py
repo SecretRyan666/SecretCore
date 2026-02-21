@@ -41,7 +41,12 @@ LEDGER = []
 
 DIST_CACHE = {}
 SECRET_CACHE = {}
-STRATEGY_HISTORY_FILE = "strategy_history.json"
+STRATEGY_HISTORY_FILE = 
+"strategy_history.json"
+
+# 리그 가중치 캐시
+LEAGUE_COUNT = {}
+LEAGUE_WEIGHT = {}
 
 # =====================================================
 # 5조건 사전 분포 캐시 (속도 개선)
@@ -302,12 +307,26 @@ def secret_pick_brain(row, df):
         row.iloc[COL_HANDI]
     )
 
-    # 5조건 분포 (60%)
     p5 = FIVE_COND_DIST.get(key, {
+        "총":0,
         "wp":0,"dp":0,"lp":0
     })
 
-    # 배당 완전일치 분포 (40%)
+    sample = p5.get("총",0)
+
+    # ===== 동적 가중치 =====
+    if sample < 20:
+        w5 = 0.4
+    elif sample < 50:
+        w5 = 0.5
+    elif sample < 150:
+        w5 = 0.65
+    else:
+        w5 = 0.75
+
+    w_exact = 1 - w5
+
+    # ===== 배당 완전일치 =====
     exact_df = df[
         (df.iloc[:, COL_WIN_ODDS]  == row.iloc[COL_WIN_ODDS]) &
         (df.iloc[:, COL_DRAW_ODDS] == row.iloc[COL_DRAW_ODDS]) &
@@ -316,9 +335,9 @@ def secret_pick_brain(row, df):
 
     exact_dist = distribution(exact_df)
 
-    sp_w = 0.6*p5.get("wp",0) + 0.4*exact_dist.get("wp",0)
-    sp_d = 0.6*p5.get("dp",0) + 0.4*exact_dist.get("dp",0)
-    sp_l = 0.6*p5.get("lp",0) + 0.4*exact_dist.get("lp",0)
+    sp_w = w5*p5.get("wp",0) + w_exact*exact_dist.get("wp",0)
+    sp_d = w5*p5.get("dp",0) + w_exact*exact_dist.get("dp",0)
+    sp_l = w5*p5.get("lp",0) + w_exact*exact_dist.get("lp",0)
 
     sp_map = {
         "승": round(sp_w,2),
@@ -328,10 +347,19 @@ def secret_pick_brain(row, df):
 
     best = max(sp_map, key=sp_map.get)
 
+    # ===== 리그 가중치 적용 =====
+    league = row.iloc[COL_LEAGUE]
+    league_weight = LEAGUE_WEIGHT.get(league, 1.0)
+
+    adjusted_conf = round((sp_map[best] / 100) * league_weight, 3)
+
     return {
         "추천": best,
         "확률": sp_map,
-        "confidence": round(sp_map[best]/100,3)
+        "confidence": adjusted_conf,
+        "sample": sample,
+        "weight_5cond": w5,
+        "league_weight": league_weight
     }
 
 # =====================================================
@@ -1344,10 +1372,42 @@ def strategy1():
     if len(candidates) < 12:
         return {"error":"경기 수 부족"}
 
-    port1 = candidates[0:3]
-    port2 = candidates[3:6]
-    port3 = candidates[6:9]
-    port4 = candidates[9:12]
+    def build_port(pool, size, used_leagues=set()):
+    port = []
+    for c in pool:
+        if len(port) == size:
+            break
+        if c["league"] not in used_leagues:
+            port.append(c)
+            used_leagues.add(c["league"])
+    return port
+
+
+# league 정보 포함하도록 candidates 수정 필요
+for _, row in base_df.iterrows():
+    brain = secret_pick_brain(row, df)
+    candidates.append({
+        "no": row.iloc[COL_NO],
+        "home": row.iloc[COL_HOME],
+        "away": row.iloc[COL_AWAY],
+        "league": row.iloc[COL_LEAGUE],  # 추가
+        "pick": brain["추천"],
+        "confidence": brain["confidence"],
+        "odds": float(row.iloc[COL_WIN_ODDS])
+                if brain["추천"] == "승"
+                else float(row.iloc[COL_DRAW_ODDS])
+                if brain["추천"] == "무"
+                else float(row.iloc[COL_LOSE_ODDS])
+    })
+
+candidates.sort(key=lambda x: x["confidence"], reverse=True)
+
+used = set()
+
+port1 = build_port(candidates, 3, used)
+port2 = build_port([c for c in candidates if c not in port1], 3, used)
+port3 = build_port([c for c in candidates if c not in port1+port2], 3, used)
+port4 = build_port([c for c in candidates if c not in port1+port2+port3], 3, used)
 
     combos = []
 
