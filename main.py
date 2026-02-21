@@ -43,6 +43,11 @@ DIST_CACHE = {}
 SECRET_CACHE = {}
 
 # =====================================================
+# 5조건 사전 분포 캐시 (속도 개선)
+# =====================================================
+FIVE_COND_DIST = {}
+
+# =====================================================
 # 데이터 로드 (dtype=str 고정)
 # =====================================================
 
@@ -63,6 +68,10 @@ def load_data():
             return
 
         CURRENT_DF = df
+
+        # ✅ 데이터 로드 후 캐시 재빌드
+        build_five_cond_cache(CURRENT_DF)
+
 
 load_data()
 
@@ -177,6 +186,51 @@ def distribution(df):
     return result
 
 # =====================================================
+# 5조건 사전 집계 생성
+# =====================================================
+def build_five_cond_cache(df):
+    global FIVE_COND_DIST
+    FIVE_COND_DIST.clear()
+
+    if df.empty:
+        return
+
+    for _, row in df.iterrows():
+
+        key = (
+            row.iloc[COL_TYPE],
+            row.iloc[COL_HOMEAWAY],
+            row.iloc[COL_GENERAL],
+            row.iloc[COL_DIR],
+            row.iloc[COL_HANDI]
+        )
+
+        if key not in FIVE_COND_DIST:
+            FIVE_COND_DIST[key] = {
+                "총":0,"승":0,"무":0,"패":0
+            }
+
+        FIVE_COND_DIST[key]["총"] += 1
+
+        result = row.iloc[COL_RESULT]
+
+        if result == "승":
+            FIVE_COND_DIST[key]["승"] += 1
+        elif result == "무":
+            FIVE_COND_DIST[key]["무"] += 1
+        elif result == "패":
+            FIVE_COND_DIST[key]["패"] += 1
+
+    for key, v in FIVE_COND_DIST.items():
+        total = v["총"]
+        if total > 0:
+            v["wp"] = round(v["승"]/total*100,2)
+            v["dp"] = round(v["무"]/total*100,2)
+            v["lp"] = round(v["패"]/total*100,2)
+        else:
+            v["wp"] = v["dp"] = v["lp"] = 0
+
+# =====================================================
 # 안전 EV
 # =====================================================
 
@@ -211,31 +265,30 @@ def safe_ev(dist, row):
 
 def secret_score_fast(row, df):
 
-    cond = build_5cond(row)
-    cond_key = tuple(cond.values())
+    key = (
+        row.iloc[COL_TYPE],
+        row.iloc[COL_HOMEAWAY],
+        row.iloc[COL_GENERAL],
+        row.iloc[COL_DIR],
+        row.iloc[COL_HANDI]
+    )
 
-    if cond_key in SECRET_CACHE:
-        return SECRET_CACHE[cond_key]
-
-    sub_df = run_filter(df, cond)
-    dist = distribution(sub_df)
+    dist = FIVE_COND_DIST.get(key, {
+        "총":0,"승":0,"무":0,"패":0,
+        "wp":0,"dp":0,"lp":0
+    })
 
     if dist["총"] < 10:
-        result = {"score":0,"sample":dist["총"],"추천":"없음"}
-        SECRET_CACHE[cond_key] = result
-        return result
+        return {"score":0,"sample":dist["총"],"추천":"없음"}
 
     ev_data = safe_ev(dist, row)
     best_ev = max(ev_data["EV"].values())
 
-    result = {
+    return {
         "score":round(best_ev,4),
         "sample":dist["총"],
         "추천":ev_data["추천"]
     }
-
-    SECRET_CACHE[cond_key] = result
-    return result
 
 # =====================================================
 # 로그인
@@ -311,9 +364,12 @@ def upload(file: UploadFile = File(...)):
 
     CURRENT_DF = df
 
-    # 캐시 초기화 (중요)
+    # 캐시 초기화
     DIST_CACHE.clear()
     SECRET_CACHE.clear()
+
+    # ✅ 5조건 캐시 재생성
+    build_five_cond_cache(CURRENT_DF)
 
     return RedirectResponse("/", status_code=302)
 
