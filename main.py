@@ -1305,8 +1305,8 @@ def page4(
 # Strategy1 - 3x3x3x3 = 81조합
 # =====================================================
 
-@app.get("/strategy1",
-response_class=HTMLResponse)
+@app.get("/strategy1")
+def strategy1():
 
     df = CURRENT_DF
     if df.empty:
@@ -1339,10 +1339,8 @@ response_class=HTMLResponse)
                     else float(row.iloc[COL_LOSE_ODDS])
         })
 
-    # confidence 기준 정렬
     candidates.sort(key=lambda x: x["confidence"], reverse=True)
 
-    # 상위 12개 필요
     if len(candidates) < 12:
         return {"error":"경기 수 부족"}
 
@@ -1351,7 +1349,6 @@ response_class=HTMLResponse)
     port3 = candidates[6:9]
     port4 = candidates[9:12]
 
-    # 81조합 생성
     combos = []
 
     for a in port1:
