@@ -1301,6 +1301,81 @@ def page4(
     """
 
 # =====================================================
+# Strategy1 - 3x3x3x3 = 81조합
+# =====================================================
+
+@app.get("/strategy1")
+def strategy1():
+
+    df = CURRENT_DF
+    if df.empty:
+        return []
+
+    base_df = df[
+        (df.iloc[:, COL_RESULT] == "경기전") &
+        (
+            (df.iloc[:, COL_TYPE] == "일반") |
+            (df.iloc[:, COL_TYPE] == "핸디1")
+        )
+    ]
+
+    candidates = []
+
+    for _, row in base_df.iterrows():
+
+        brain = secret_pick_brain(row, df)
+
+        candidates.append({
+            "no": row.iloc[COL_NO],
+            "home": row.iloc[COL_HOME],
+            "away": row.iloc[COL_AWAY],
+            "pick": brain["추천"],
+            "confidence": brain["confidence"],
+            "odds": float(row.iloc[COL_WIN_ODDS])
+                    if brain["추천"] == "승"
+                    else float(row.iloc[COL_DRAW_ODDS])
+                    if brain["추천"] == "무"
+                    else float(row.iloc[COL_LOSE_ODDS])
+        })
+
+    # confidence 기준 정렬
+    candidates.sort(key=lambda x: x["confidence"], reverse=True)
+
+    # 상위 12개 필요
+    if len(candidates) < 12:
+        return {"error":"경기 수 부족"}
+
+    port1 = candidates[0:3]
+    port2 = candidates[3:6]
+    port3 = candidates[6:9]
+    port4 = candidates[9:12]
+
+    # 81조합 생성
+    combos = []
+
+    for a in port1:
+        for b in port2:
+            for c in port3:
+                for d in port4:
+                    combos.append({
+                        "matches":[a,b,c,d],
+                        "combo_odds": round(
+                            a["odds"] *
+                            b["odds"] *
+                            c["odds"] *
+                            d["odds"], 2
+                        )
+                    })
+
+    return {
+        "port1": port1,
+        "port2": port2,
+        "port3": port3,
+        "port4": port4,
+        "total_combos": len(combos)
+    }
+
+# =====================================================
 # 실행부
 # =====================================================
 
