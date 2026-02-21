@@ -41,8 +41,7 @@ LEDGER = []
 
 DIST_CACHE = {}
 SECRET_CACHE = {}
-STRATEGY_HISTORY_FILE = 
-"strategy_history.json"
+STRATEGY_HISTORY_FILE = "strategy_history.json"
 
 # 리그 가중치 캐시
 LEAGUE_COUNT = {}
@@ -77,6 +76,7 @@ def load_data():
 
         # ✅ 데이터 로드 후 캐시 재빌드
         build_five_cond_cache(CURRENT_DF)
+        build_league_weight(CURRENT_DF)
 
 
 load_data()
@@ -233,6 +233,32 @@ def build_five_cond_cache(df):
             FIVE_COND_DIST[key]["wp"] = 0
             FIVE_COND_DIST[key]["dp"] = 0
             FIVE_COND_DIST[key]["lp"] = 0
+
+# =====================================================
+# 리그 가중치 생성
+# =====================================================
+def build_league_weight(df):
+
+    global LEAGUE_COUNT, LEAGUE_WEIGHT
+
+    LEAGUE_COUNT.clear()
+    LEAGUE_WEIGHT.clear()
+
+    if df.empty:
+        return
+
+    league_counts = df.iloc[:, COL_LEAGUE].value_counts()
+
+    for league, count in league_counts.items():
+
+        LEAGUE_COUNT[league] = int(count)
+
+        if count >= 800:
+            LEAGUE_WEIGHT[league] = 1.05
+        elif count >= 300:
+            LEAGUE_WEIGHT[league] = 1.00
+        else:
+            LEAGUE_WEIGHT[league] = 0.90
 
 # =====================================================
 # 안전 EV
@@ -442,6 +468,7 @@ def upload(file: UploadFile = File(...)):
 
     # ✅ 5조건 캐시 재생성
     build_five_cond_cache(CURRENT_DF)
+    build_league_weight(CURRENT_DF)
 
     return RedirectResponse("/", status_code=302)
 
@@ -1358,6 +1385,7 @@ def strategy1():
             "no": row.iloc[COL_NO],
             "home": row.iloc[COL_HOME],
             "away": row.iloc[COL_AWAY],
+            "league": row.iloc[COL_LEAGUE],
             "pick": brain["추천"],
             "confidence": brain["confidence"],
             "odds": float(row.iloc[COL_WIN_ODDS])
@@ -1372,42 +1400,23 @@ def strategy1():
     if len(candidates) < 12:
         return {"error":"경기 수 부족"}
 
-    def build_port(pool, size, used_leagues=set()):
-    port = []
-    for c in pool:
-        if len(port) == size:
-            break
-        if c["league"] not in used_leagues:
-            port.append(c)
-            used_leagues.add(c["league"])
-    return port
+    # 리그 중복 방지 포트 구성
+    def build_port(pool, size, used_leagues):
+        port = []
+        for c in pool:
+            if len(port) == size:
+                break
+            if c["league"] not in used_leagues:
+                port.append(c)
+                used_leagues.add(c["league"])
+        return port
 
+    used = set()
 
-# league 정보 포함하도록 candidates 수정 필요
-for _, row in base_df.iterrows():
-    brain = secret_pick_brain(row, df)
-    candidates.append({
-        "no": row.iloc[COL_NO],
-        "home": row.iloc[COL_HOME],
-        "away": row.iloc[COL_AWAY],
-        "league": row.iloc[COL_LEAGUE],  # 추가
-        "pick": brain["추천"],
-        "confidence": brain["confidence"],
-        "odds": float(row.iloc[COL_WIN_ODDS])
-                if brain["추천"] == "승"
-                else float(row.iloc[COL_DRAW_ODDS])
-                if brain["추천"] == "무"
-                else float(row.iloc[COL_LOSE_ODDS])
-    })
-
-candidates.sort(key=lambda x: x["confidence"], reverse=True)
-
-used = set()
-
-port1 = build_port(candidates, 3, used)
-port2 = build_port([c for c in candidates if c not in port1], 3, used)
-port3 = build_port([c for c in candidates if c not in port1+port2], 3, used)
-port4 = build_port([c for c in candidates if c not in port1+port2+port3], 3, used)
+    port1 = build_port(candidates, 3, used)
+    port2 = build_port([c for c in candidates if c not in port1], 3, used)
+    port3 = build_port([c for c in candidates if c not in port1+port2], 3, used)
+    port4 = build_port([c for c in candidates if c not in port1+port2+port3], 3, used)
 
     combos = []
 
