@@ -585,6 +585,8 @@ async function load(){
 
     data.forEach(function(m){
 
+        let row = m.row;
+
         let badge = "";
 
 if(m.secret){
@@ -881,14 +883,14 @@ def detail(
     <h3>동일리그 5조건</h3>
     총 {league_dist["총"]}경기
 
-    <div>승 {base_dist["wp"]}% ({base_dist["승"]}경기)</div>
-{bar_html(base_dist["wp"],"win")}
+    <div>승 {league_dist["wp"]}% ({league_dist["승"]}경기)</div>
+{bar_html(league_dist["wp"],"win")}
 
-<div>무 {base_dist["dp"]}% ({base_dist["무"]}경기)</div>
-{bar_html(base_dist["dp"],"draw")}
+<div>무 {league_dist["dp"]}% ({league_dist["무"]}경기)</div>
+{bar_html(league_dist["dp"],"draw")}
 
-<div>패 {base_dist["lp"]}% ({base_dist["패"]}경기)</div>
-{bar_html(base_dist["lp"],"lose")}
+<div>패 {league_dist["lp"]}% ({league_dist["패"]}경기)</div>
+{bar_html(league_dist["lp"],"lose")}
 
     </div>
 
@@ -997,32 +999,32 @@ def page3(
     <div style="display:flex;gap:12px;">
 
     <div style="flex:1;background:#1e293b;padding:12px;border-radius:12px;">
-    <b>홈</b><br>
-    총 {all_dist["총"]}경기
+<b>홈</b><br>
+총 {home_dist["총"]}경기
 
-<div>승 {all_dist["wp"]}% ({all_dist["승"]}경기)</div>
-{bar_html(all_dist["wp"],"win")}
+<div>승 {home_dist["wp"]}% ({home_dist["승"]}경기)</div>
+{bar_html(home_dist["wp"],"win")}
 
-<div>무 {all_dist["dp"]}% ({all_dist["무"]}경기)</div>
-{bar_html(all_dist["dp"],"draw")}
+<div>무 {home_dist["dp"]}% ({home_dist["무"]}경기)</div>
+{bar_html(home_dist["dp"],"draw")}
 
-<div>패 {all_dist["lp"]}% ({all_dist["패"]}경기)</div>
-{bar_html(all_dist["lp"],"lose")}
-    </div>
+<div>패 {home_dist["lp"]}% ({home_dist["패"]}경기)</div>
+{bar_html(home_dist["lp"],"lose")}
+</div>
 
     <div style="flex:1;background:#1e293b;padding:12px;border-radius:12px;">
-    <b>원정</b><br>
-    총 {all_dist["총"]}경기
+<b>원정</b><br>
+총 {away_dist["총"]}경기
 
-<div>승 {all_dist["wp"]}% ({all_dist["승"]}경기)</div>
-{bar_html(all_dist["wp"],"win")}
+<div>승 {away_dist["wp"]}% ({away_dist["승"]}경기)</div>
+{bar_html(away_dist["wp"],"win")}
 
-<div>무 {all_dist["dp"]}% ({all_dist["무"]}경기)</div>
-{bar_html(all_dist["dp"],"draw")}
+<div>무 {away_dist["dp"]}% ({away_dist["무"]}경기)</div>
+{bar_html(away_dist["dp"],"draw")}
 
-<div>패 {all_dist["lp"]}% ({all_dist["패"]}경기)</div>
-{bar_html(all_dist["lp"],"lose")}
-    </div>
+<div>패 {away_dist["lp"]}% ({away_dist["패"]}경기)</div>
+{bar_html(away_dist["lp"],"lose")}
+</div>
 
     </div>
 
@@ -1146,48 +1148,48 @@ def page4(
 
     <details>
     <summary><b>승 동일 통계</b></summary>
-    총 {exact_dist["총"]}경기
+    총 {win_dist["총"]}경기
 
-<div>승 {exact_dist["wp"]}% ({exact_dist["승"]}경기)</div>
-{bar_html(exact_dist["wp"],"win")}
+<div>승 {win_dist["wp"]}% ({win_dist["승"]}경기)</div>
+{bar_html(win_dist["wp"],"win")}
 
-<div>무 {exact_dist["dp"]}% ({exact_dist["무"]}경기)</div>
-{bar_html(exact_dist["dp"],"draw")}
+<div>무 {win_dist["dp"]}% ({win_dist["무"]}경기)</div>
+{bar_html(win_dist["dp"],"draw")}
 
-<div>패 {exact_dist["lp"]}% ({exact_dist["패"]}경기)</div>
-{bar_html(exact_dist["lp"],"lose")}
+<div>패 {win_dist["lp"]}% ({win_dist["패"]}경기)</div>
+{bar_html(win_dist["lp"],"lose")}
     </details>
 
     <br>
 
     <details>
     <summary><b>무 동일 통계</b></summary>
-    총 {exact_dist["총"]}경기
+    총 {draw_dist["총"]}경기
 
-<div>승 {exact_dist["wp"]}% ({exact_dist["승"]}경기)</div>
-{bar_html(exact_dist["wp"],"win")}
+<div>승 {draw_dist["wp"]}% ({draw_dist["승"]}경기)</div>
+{bar_html(draw_dist["wp"],"win")}
 
-<div>무 {exact_dist["dp"]}% ({exact_dist["무"]}경기)</div>
-{bar_html(exact_dist["dp"],"draw")}
+<div>무 {draw_dist["dp"]}% ({draw_dist["무"]}경기)</div>
+{bar_html(draw_dist["dp"],"draw")}
 
-<div>패 {exact_dist["lp"]}% ({exact_dist["패"]}경기)</div>
-{bar_html(exact_dist["lp"],"lose")}
+<div>패 {draw_dist["lp"]}% ({draw_dist["패"]}경기)</div>
+{bar_html(draw_dist["lp"],"lose")}
     </details>
 
     <br>
 
     <details>
     <summary><b>패 동일 통계</b></summary>
-    총 {exact_dist["총"]}경기
+    총 {lose_dist["총"]}경기
 
-<div>승 {exact_dist["wp"]}% ({exact_dist["승"]}경기)</div>
-{bar_html(exact_dist["wp"],"win")}
+<div>승 {lose_dist["wp"]}% ({lose_dist["승"]}경기)</div>
+{bar_html(lose_dist["wp"],"win")}
 
-<div>무 {exact_dist["dp"]}% ({exact_dist["무"]}경기)</div>
-{bar_html(exact_dist["dp"],"draw")}
+<div>무 {lose_dist["dp"]}% ({lose_dist["무"]}경기)</div>
+{bar_html(lose_dist["dp"],"draw")}
 
-<div>패 {exact_dist["lp"]}% ({exact_dist["패"]}경기)</div>
-{bar_html(exact_dist["lp"],"lose")}
+<div>패 {lose_dist["lp"]}% ({lose_dist["패"]}경기)</div>
+{bar_html(lose_dist["lp"],"lose")}
     </details>
 
     <br><br>
@@ -1195,7 +1197,6 @@ def page4(
     </body>
     </html>
     """
-
 
 # =====================================================
 # 실행부
