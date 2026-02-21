@@ -42,6 +42,8 @@ LEDGER = []
 DIST_CACHE = {}
 SECRET_CACHE = {}
 STRATEGY_HISTORY_FILE = "strategy_history.json"
+# 최소 신뢰도 컷
+MIN_CONFIDENCE = 0.32
 
 # 리그 가중치 캐시
 LEAGUE_COUNT = {}
@@ -1397,6 +1399,10 @@ def strategy1():
 
     candidates.sort(key=lambda x: x["confidence"], reverse=True)
 
+    # confidence 컷 적용
+    candidates = [c for c in candidates if 
+    c["confidence"] >= MIN_CONFIDENCE]
+
     if len(candidates) < 12:
         return {"error":"경기 수 부족"}
 
@@ -1482,6 +1488,10 @@ def strategy2():
 
     # confidence 기준 정렬
     candidates.sort(key=lambda x: x["confidence"], reverse=True)
+
+    # confidence 컷 적용
+    candidates = [c for c in candidates if 
+    c["confidence"] >= MIN_CONFIDENCE]
 
     if len(candidates) < 20:
         return {"error":"경기 수 부족"}
@@ -1661,6 +1671,9 @@ def evaluate():
 @app.get("/strategy1-view", response_class=HTMLResponse)
 def strategy1_view():
 
+    if not LOGGED_IN:
+        return RedirectResponse("/", status_code=302)
+
     data = strategy1()
 
     if "error" in data:
@@ -1728,6 +1741,9 @@ def strategy1_view():
 @app.get("/strategy2-view", response_class=HTMLResponse)
 def strategy2_view():
 
+    if not LOGGED_IN:
+        return RedirectResponse("/", status_code=302)
+
     data = strategy2()
 
     if "error" in data:
@@ -1786,6 +1802,9 @@ def strategy2_view():
 
 @app.get("/history", response_class=HTMLResponse)
 def history_page():
+
+    if not LOGGED_IN:
+        return RedirectResponse("/", status_code=302)
 
     if not os.path.exists(STRATEGY_HISTORY_FILE):
         return "<h2>기록 없음</h2>"
