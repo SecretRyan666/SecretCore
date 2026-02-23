@@ -858,23 +858,20 @@ def matches(
 
     for _, row in base_df.iterrows():
 
-        data = row.values.tolist()
-        sec = secret_score_fast(row, df)
-        "sp_pick": brain["추천"],
-        "confidence": brain["confidence"]
-        is_secret = bool(
-            sec["score"] > 0.05 and
-            sec["sample"] >= 20 and
-            sec["추천"] != "없음"
-        )
+    data = row.values.tolist()
+    sec = secret_score_fast(row, df)
 
-        result.append({
-    "row": list(map(str, data)),
-    "secret": is_secret,
-    "pick": sec["추천"] if is_secret else "",
-    "sp_pick": brain["추천"],
-    "confidence": brain["confidence"]
-})
+    is_secret = bool(
+        sec["score"] > 0.05 and
+        sec["sample"] >= 20 and
+        sec["추천"] != "없음"
+    )
+
+    result.append({
+        "row": list(map(str, data)),
+        "secret": is_secret,
+        "pick": sec["추천"] if is_secret else ""
+    })
 
     return result
 
