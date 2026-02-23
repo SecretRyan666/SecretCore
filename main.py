@@ -158,7 +158,10 @@ def run_filter(df, conditions: dict):
 
 def distribution(df):
 
-    key = tuple(df.index)
+    if len(df) == 0:
+    key = ("empty", 0)
+else:
+    key = (len(df), df.iloc[0, COL_NO]
 
     if key in DIST_CACHE:
         return DIST_CACHE[key]
@@ -296,6 +299,10 @@ def safe_ev(dist, row):
 # =====================================================
 
 def secret_score_fast(row, df):
+
+if not FIVE_COND_DIST:
+    build_five_cond_cache(df)
+    build_league_weight(df)
 
     key = (
         row.iloc[COL_TYPE],
@@ -468,9 +475,10 @@ def upload(file: UploadFile = File(...)):
     DIST_CACHE.clear()
     SECRET_CACHE.clear()
 
-    # ✅ 5조건 캐시 재생성
-    build_five_cond_cache(CURRENT_DF)
-    build_league_weight(CURRENT_DF)
+    # 캐시 지연 생성 (lazy build)
+    FIVE_COND_DIST.clear()
+    LEAGUE_COUNT.clear()
+    LEAGUE_WEIGHT.clear()
 
     return RedirectResponse("/", status_code=302)
 
