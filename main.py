@@ -159,9 +159,9 @@ def run_filter(df, conditions: dict):
 def distribution(df):
 
     if len(df) == 0:
-    key = ("empty", 0)
-else:
-    key = (len(df), df.iloc[0, COL_NO]
+        key = ("empty", 0)
+    else:
+        key = (len(df), df.iloc[0, COL_NO])
 
     if key in DIST_CACHE:
         return DIST_CACHE[key]
@@ -300,9 +300,9 @@ def safe_ev(dist, row):
 
 def secret_score_fast(row, df):
 
-if not FIVE_COND_DIST:
-    build_five_cond_cache(df)
-    build_league_weight(df)
+    if not FIVE_COND_DIST:
+        build_five_cond_cache(df)
+        build_league_weight(df)
 
     key = (
         row.iloc[COL_TYPE],
@@ -804,6 +804,33 @@ load();
 # =====================================================
 
 @app.get("/matches")
+def matches(
+    type: str = None,
+    homeaway: str = None,
+    general: str = None,
+    dir: str = None,
+    handi: str = None
+):
+
+    df = CURRENT_DF
+    if df.empty:
+        return []
+
+    base_df = df[
+        (df.iloc[:, COL_RESULT] == "경기전") &
+        (
+            (df.iloc[:, COL_TYPE] == "일반") |
+            (df.iloc[:, COL_TYPE] == "핸디1")
+        )
+    ]
+
+    base_df = apply_filters(
+        base_df, type, homeaway, general, dir, handi
+    )
+
+    result = []
+
+    @app.get("/matches")
 def matches(
     type: str = None,
     homeaway: str = None,
