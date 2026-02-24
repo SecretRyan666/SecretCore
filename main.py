@@ -1110,14 +1110,14 @@ min-width:280px;display:none;">
 <br><br>
 
 <script>
-function toggleBox(id){
+function toggleBox(id){{
     var el = document.getElementById(id);
-    if(el.style.display==="none"){
+    if(el.style.display==="none"){{
         el.style.display="block";
-    }else{
+    }}else{
         el.style.display="none";
-    }
-}
+    }}
+}}
 </script>
 
 <br><br>
