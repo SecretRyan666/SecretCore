@@ -884,22 +884,24 @@ def detail(
     away   = row.iloc[COL_AWAY]
     league = row.iloc[COL_LEAGUE]
 
-five_cond_text = (
-    f"{row.iloc[COL_TYPE]} · "
-    f"{row.iloc[COL_HOMEAWAY]} · "
-    f"{row.iloc[COL_GENERAL]} · "
-    f"{row.iloc[COL_DIR]} · "
-    f"{row.iloc[COL_HANDI]}"
-)
+    # 🔥 반드시 4칸 들여쓰기
 
-league_cond_text = (
-    f"{row.iloc[COL_LEAGUE]} · "
-    f"{row.iloc[COL_TYPE]} · "
-    f"{row.iloc[COL_HOMEAWAY]} · "
-    f"{row.iloc[COL_GENERAL]} · "
-    f"{row.iloc[COL_DIR]} · "
-    f"{row.iloc[COL_HANDI]}"
-)
+    five_cond_text = (
+        f"{row.iloc[COL_TYPE]} · "
+        f"{row.iloc[COL_HOMEAWAY]} · "
+        f"{row.iloc[COL_GENERAL]} · "
+        f"{row.iloc[COL_DIR]} · "
+        f"{row.iloc[COL_HANDI]}"
+    )
+
+    league_cond_text = (
+        f"{row.iloc[COL_LEAGUE]} · "
+        f"{row.iloc[COL_TYPE]} · "
+        f"{row.iloc[COL_HOMEAWAY]} · "
+        f"{row.iloc[COL_GENERAL]} · "
+        f"{row.iloc[COL_DIR]} · "
+        f"{row.iloc[COL_HANDI]}"
+    )
 
     filtered_df = apply_filters(CURRENT_DF, type, homeaway, general, dir, handi)
 
