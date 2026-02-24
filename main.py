@@ -450,6 +450,135 @@ def secret_pick_brain(row, df):
     }
 
 # =====================================================
+# safe_ev_tuple
+# =====================================================
+
+def safe_ev_tuple(dist, row):
+
+    try:
+        win_odds  = float(row[COL_WIN_ODDS])
+        draw_odds = float(row[COL_DRAW_ODDS])
+        lose_odds = float(row[COL_LOSE_ODDS])
+    except:
+        return {"EV": {"승":0,"무":0,"패":0}, "추천":"없음"}
+
+    ev_w = dist["wp"]/100 * win_odds  - 1
+    ev_d = dist["dp"]/100 * draw_odds - 1
+    ev_l = dist["lp"]/100 * lose_odds - 1
+
+    ev_map = {"승":ev_w, "무":ev_d, "패":ev_l}
+    best = max(ev_map, key=ev_map.get)
+
+    return {
+        "EV":{
+            "승":round(ev_w,3),
+            "무":round(ev_d,3),
+            "패":round(ev_l,3)
+        },
+        "추천":best
+    }
+
+# =====================================================
+# secret_score_fast_tuple
+# =====================================================
+
+def secret_score_fast_tuple(row):
+
+    key = (
+        row[COL_TYPE],
+        row[COL_HOMEAWAY],
+        row[COL_GENERAL],
+        row[COL_DIR],
+        row[COL_HANDI]
+    )
+
+    dist = FIVE_COND_DIST.get(key, {
+        "총":0,"승":0,"무":0,"패":0,
+        "wp":0,"dp":0,"lp":0
+    })
+
+    if dist["총"] < 10:
+        return {"score":0,"sample":dist["총"],"추천":"없음"}
+
+    ev_data = safe_ev_tuple(dist, row)
+    best_ev = max(ev_data["EV"].values())
+
+    return {
+        "score":round(best_ev,4),
+        "sample":dist["총"],
+        "추천":ev_data["추천"]
+    }
+
+# =====================================================
+# secret_pick_brain
+# =====================================================
+
+def secret_pick_brain_tuple(row):
+
+    key = (
+        row[COL_TYPE],
+        row[COL_HOMEAWAY],
+        row[COL_GENERAL],
+        row[COL_DIR],
+        row[COL_HANDI]
+    )
+
+    p5 = FIVE_COND_DIST.get(key, {
+        "총": 0,
+        "wp": 0, "dp": 0, "lp": 0
+    })
+
+    sample = p5.get("총", 0)
+
+    if sample < 20:
+        w5 = 0.4
+    elif sample < 50:
+        w5 = 0.5
+    elif sample < 150:
+        w5 = 0.65
+    else:
+        w5 = 0.75
+
+    w_exact = 1 - w5
+
+    odds_key = (
+        row[COL_WIN_ODDS],
+        row[COL_DRAW_ODDS],
+        row[COL_LOSE_ODDS]
+    )
+
+    exact_dist = ODDS_DIST_CACHE.get(odds_key, {
+        "총": 0,
+        "wp": 0, "dp": 0, "lp": 0
+    })
+
+    sp_w = w5 * p5.get("wp", 0) + w_exact * exact_dist.get("wp", 0)
+    sp_d = w5 * p5.get("dp", 0) + w_exact * exact_dist.get("dp", 0)
+    sp_l = w5 * p5.get("lp", 0) + w_exact * exact_dist.get("lp", 0)
+
+    sp_map = {
+        "승": round(sp_w, 2),
+        "무": round(sp_d, 2),
+        "패": round(sp_l, 2)
+    }
+
+    best = max(sp_map, key=sp_map.get)
+
+    league = row[COL_LEAGUE]
+    league_weight = LEAGUE_WEIGHT.get(league, 1.0)
+
+    adjusted_conf = round((sp_map[best] / 100) * league_weight, 3)
+
+    return {
+        "추천": best,
+        "확률": sp_map,
+        "confidence": adjusted_conf,
+        "sample": sample,
+        "weight_5cond": w5,
+        "league_weight": league_weight
+    }
+
+# =====================================================
 # 로그인
 # =====================================================
 
@@ -614,12 +743,13 @@ def matches(
 
     result = []
 
-    for _, row in base_df.iterrows():
+    for row in base_df.itertuples(index=False):
 
-        data = row.values.tolist()
+        data = list(row)
 
-        sec = secret_score_cached(row, CURRENT_DF)
-        brain = secret_pick_brain(row, CURRENT_DF)
+        # tuple → pandas row 형태로 접근 제거
+        sec = secret_score_fast_tuple(row)
+        brain = secret_pick_brain_tuple(row)
 
         is_secret = bool(
             sec["score"] > 0.05 and
@@ -636,6 +766,7 @@ def matches(
         })
 
     return result
+
 @app.get("/", response_class=HTMLResponse)
 def home():
 
@@ -747,82 +878,47 @@ function closeModal(){
 document.getElementById("filterModal").style.display="none";
 }
 
-async function loadFilters(){
-let res = await fetch("/filters");
-let data = await res.json();
-let html="";
-for(let key in data){
-html += "<div class='checkbox-group'><b>"+key+"</b><br>";
-data[key].forEach(v=>{
-html += `<label>
-<input type="checkbox" name="${key}" value="${v}"> ${v}
-</label><br>`;
-});
-html += "</div>";
-}
-document.getElementById("filterArea").innerHTML = html;
-}
-
-function applyFilters(){
-let params = new URLSearchParams();
-document.querySelectorAll("#filterArea input:checked")
-.forEach(el=>{
-if(params.has(el.name)){
-params.set(el.name, params.get(el.name)+","+el.value);
-}else{
-params.set(el.name, el.value);
-}
-});
-window.location.href = "/?" + params.toString();
-}
-
-async function updateConditionBar(){
-let params = new URLSearchParams(window.location.search);
-let r = await fetch('/matches?' + params.toString());
-let data = await r.json();
-let text="";
-if(data.length>0){
-let first=data[0].row;
-text = first[1] + "년 · " + first[2];
-}else{
-text="경기 없음";
-}
-document.getElementById("conditionBar").innerText=text;
-}
-
 async function load(){
-updateConditionBar();
-let params = new URLSearchParams(window.location.search);
-let r = await fetch('/matches?' + params.toString());
-let data = await r.json();
-let html="";
-data.forEach(function(m){
-let row=m.row;
-let badge="";
-if(m.secret){
-badge=`<div class="secret-badge">
-시크릿픽 ${m.pick}
-</div>`;
-}
-html+=`<div class="card">
-${badge}
-<div><b>${row[6]}</b> vs <b>${row[7]}</b></div>
-<div>승 ${row[8]} | 무 ${row[9]} | 패 ${row[10]}</div>
-<div>${row[14]} · ${row[16]} · ${row[11]} · ${row[15]} · ${row[12]}</div>
-<div class="info-btn">
-let query = window.location.search;
 
-html+=`<div class="card">
-${badge}
-<div><b>${row[6]}</b> vs <b>${row[7]}</b></div>
-<div>승 ${row[8]} | 무 ${row[9]} | 패 ${row[10]}</div>
-<div>${row[14]} · ${row[16]} · ${row[11]} · ${row[15]} · ${row[12]}</div>
-<div class="info-btn">
-<a href="/detail?no=${row[0]}${query}" style="color:#38bdf8;">정보</a>
-</div>
-</div>`;
-});
-document.getElementById("list").innerHTML=html;
+    let params = new URLSearchParams(window.location.search);
+    let r = await fetch('/matches?' + params.toString());
+    let data = await r.json();
+
+    // 🔥 여기서 conditionBar 처리
+    if(data.length>0){
+        let first=data[0].row;
+        document.getElementById("conditionBar").innerText =
+        first[1] + "년 · " + first[2];
+    } else {
+        document.getElementById("conditionBar").innerText="경기 없음";
+    }
+
+    let html="";
+    let query = window.location.search;
+
+    data.forEach(function(m){
+
+        let row=m.row;
+        let badge="";
+
+        if(m.secret){
+            badge=`<div class="secret-badge">
+            시크릿픽 ${m.pick}
+            </div>`;
+        }
+
+        html+=`<div class="card">
+        ${badge}
+        <div><b>${row[6]}</b> vs <b>${row[7]}</b></div>
+        <div>승 ${row[8]} | 무 ${row[9]} | 패 ${row[10]}</div>
+        <div>${row[14]} · ${row[16]} · ${row[11]} · ${row[15]} · ${row[12]}</div>
+        <div class="info-btn">
+        <a href="/detail?no=${row[0]}${query}" style="color:#38bdf8;">정보</a>
+        </div>
+        </div>`;
+    });
+
+    document.getElementById("list").innerHTML=html;
 }
 
 load();
