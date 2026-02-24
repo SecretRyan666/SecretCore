@@ -951,7 +951,7 @@ border-radius:999px;"></div>
 """
 
 # =====================================================
-# Page2 - 상세 분석
+# Page2 - 상세 분석 (FULL SAFE VERSION)
 # =====================================================
 
 @app.get("/detail", response_class=HTMLResponse)
@@ -980,6 +980,25 @@ def detail(
     away   = row.iloc[COL_AWAY]
     league = row.iloc[COL_LEAGUE]
 
+    # -----------------------------
+    # 필터 적용
+    # -----------------------------
+    filtered_df = apply_filters(CURRENT_DF, type, homeaway, general, dir, handi)
+
+    # -----------------------------
+    # 카드1 - 5조건 완전일치
+    # -----------------------------
+    base_cond = build_5cond(row)
+    base_df = run_filter(filtered_df, base_cond)
+    base_dist = distribution(base_df)
+
+    # -----------------------------
+    # 카드1 - 동일리그 5조건
+    # -----------------------------
+    league_cond = build_league_cond(row)
+    league_df = run_filter(filtered_df, league_cond)
+    league_dist = distribution(league_df)
+
     five_cond_text = (
         f"{row.iloc[COL_TYPE]} · "
         f"{row.iloc[COL_HOMEAWAY]} · "
@@ -997,62 +1016,56 @@ def detail(
         f"{row.iloc[COL_HANDI]}"
     )
 
-    filtered_df = apply_filters(CURRENT_DF, type, homeaway, general, dir, handi)
+    # =====================================================
+    # 카드2 - 5조건 리그별 분포
+    # =====================================================
 
-    # 카드1 - 5조건 완전일치
-    base_cond = build_5cond(row)
-    base_df = run_filter(filtered_df, base_cond)
-    base_dist = distribution(base_df)
+    league_group_df = run_filter(filtered_df, build_5cond(row))
+    league_group_df = league_group_df[
+        league_group_df.iloc[:, COL_RESULT] != "경기전"
+    ]
 
-    # 카드1 - 동일 리그 + 5조건
-    league_cond = build_league_cond(row)
-    league_df = run_filter(filtered_df, league_cond)
-    league_dist = distribution(league_df)
+    league_groups = league_group_df.groupby(
+        league_group_df.iloc[:, COL_LEAGUE]
+    )
 
-# ---------------------------------------------
-# 카드2 - 5조건 리그별 분포
-# ---------------------------------------------
+    card2_html = ""
 
-league_group_df = run_filter(filtered_df, build_5cond(row))
-league_group_df = league_group_df[
-    league_group_df.iloc[:, COL_RESULT] != "경기전"
-]
+    for lg, group in league_groups:
+        dist = distribution(group)
 
-league_groups = league_group_df.groupby(
-    league_group_df.iloc[:, COL_LEAGUE]
-)
+        card2_html += f"""
+        <div style="background:#1e293b;
+        padding:16px;border-radius:16px;
+        margin-bottom:16px;">
 
-card2_html = ""
+        <h3>5조건 리그별 분포</h3>
 
-for lg, group in league_groups:
-    dist = distribution(group)
+        <div style="font-size:12px;opacity:0.7;margin-bottom:10px;">
+        5조건 + {lg}
+        </div>
 
-    card2_html += f"""
-    <div style="background:#1e293b;
-    padding:16px;border-radius:16px;
-    margin-bottom:16px;">
+        총 {dist["총"]}경기
 
-    <h3>5조건 리그별 분포</h3>
+        <div>승 {dist["wp"]}% ({dist["승"]}경기)</div>
+        {bar_html(dist["wp"],"win")}
 
-    <div style="font-size:12px;opacity:0.7;margin-bottom:10px;">
-    5조건 + {lg}
-    </div>
+        <div>무 {dist["dp"]}% ({dist["무"]}경기)</div>
+        {bar_html(dist["dp"],"draw")}
 
-    총 {dist["총"]}경기
+        <div>패 {dist["lp"]}% ({dist["패"]}경기)</div>
+        {bar_html(dist["lp"],"lose")}
 
-    <div>승 {dist["wp"]}% ({dist["승"]}경기)</div>
-    {bar_html(dist["wp"],"win")}
+        </div>
+        """
 
-    <div>무 {dist["dp"]}% ({dist["무"]}경기)</div>
-    {bar_html(dist["dp"],"draw")}
+    condition_str = filter_text(type, homeaway, general, dir, handi)
 
-    <div>패 {dist["lp"]}% ({dist["패"]}경기)</div>
-    {bar_html(dist["lp"],"lose")}
+    # =====================================================
+    # HTML RETURN (절대 밖에 두지 말 것)
+    # =====================================================
 
-    </div>
-    """
-
-return f"""
+    return f"""
 <html>
 <body style="background:#0f1720;color:white;font-family:Arial;padding:20px;">
 
@@ -1069,7 +1082,35 @@ return f"""
 <br><br>
 
 <div style="display:flex;gap:20px;flex-wrap:wrap;">
-...
+
+<div style="flex:1;background:#1e293b;padding:16px;border-radius:16px;min-width:280px;">
+<h3>5조건 완전일치</h3>
+<div style="font-size:12px;opacity:0.7;margin-bottom:10px;">
+{five_cond_text}
+</div>
+총 {base_dist["총"]}경기
+<div>승 {base_dist["wp"]}% ({base_dist["승"]}경기)</div>
+{bar_html(base_dist["wp"],"win")}
+<div>무 {base_dist["dp"]}% ({base_dist["무"]}경기)</div>
+{bar_html(base_dist["dp"],"draw")}
+<div>패 {base_dist["lp"]}% ({base_dist["패"]}경기)</div>
+{bar_html(base_dist["lp"],"lose")}
+</div>
+
+<div style="flex:1;background:#1e293b;padding:16px;border-radius:16px;min-width:280px;">
+<h3>동일리그 5조건</h3>
+<div style="font-size:12px;opacity:0.7;margin-bottom:10px;">
+{league_cond_text}
+</div>
+총 {league_dist["총"]}경기
+<div>승 {league_dist["wp"]}% ({league_dist["승"]}경기)</div>
+{bar_html(league_dist["wp"],"win")}
+<div>무 {league_dist["dp"]}% ({league_dist["무"]}경기)</div>
+{bar_html(league_dist["dp"],"draw")}
+<div>패 {league_dist["lp"]}% ({league_dist["패"]}경기)</div>
+{bar_html(league_dist["lp"],"lose")}
+</div>
+
 </div>
 
 <br><br>
