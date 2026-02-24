@@ -395,11 +395,11 @@ def secret_pick_brain(row, df):
     )
 
     p5 = FIVE_COND_DIST.get(key, {
-        "총":0,
-        "wp":0,"dp":0,"lp":0
+        "총": 0,
+        "wp": 0, "dp": 0, "lp": 0
     })
 
-    sample = p5.get("총",0)
+    sample = p5.get("총", 0)
 
     if sample < 20:
         w5 = 0.4
@@ -413,23 +413,24 @@ def secret_pick_brain(row, df):
     w_exact = 1 - w5
 
     odds_key = (
-    row.iloc[COL_WIN_ODDS],
-    row.iloc[COL_DRAW_ODDS],
-    row.iloc[COL_LOSE_ODDS]
-)
+        row.iloc[COL_WIN_ODDS],
+        row.iloc[COL_DRAW_ODDS],
+        row.iloc[COL_LOSE_ODDS]
+    )
 
-exact_dist = ODDS_DIST_CACHE.get(odds_key, {
-    "총":0,"wp":0,"dp":0,"lp":0
-})
+    exact_dist = ODDS_DIST_CACHE.get(odds_key, {
+        "총": 0,
+        "wp": 0, "dp": 0, "lp": 0
+    })
 
-    sp_w = w5*p5.get("wp",0) + w_exact*exact_dist.get("wp",0)
-    sp_d = w5*p5.get("dp",0) + w_exact*exact_dist.get("dp",0)
-    sp_l = w5*p5.get("lp",0) + w_exact*exact_dist.get("lp",0)
+    sp_w = w5 * p5.get("wp", 0) + w_exact * exact_dist.get("wp", 0)
+    sp_d = w5 * p5.get("dp", 0) + w_exact * exact_dist.get("dp", 0)
+    sp_l = w5 * p5.get("lp", 0) + w_exact * exact_dist.get("lp", 0)
 
     sp_map = {
-        "승": round(sp_w,2),
-        "무": round(sp_d,2),
-        "패": round(sp_l,2)
+        "승": round(sp_w, 2),
+        "무": round(sp_d, 2),
+        "패": round(sp_l, 2)
     }
 
     best = max(sp_map, key=sp_map.get)
