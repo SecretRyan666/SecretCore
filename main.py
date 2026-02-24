@@ -1114,7 +1114,7 @@ function toggleBox(id){{
     var el = document.getElementById(id);
     if(el.style.display==="none"){{
         el.style.display="block";
-    }}else{
+    }}else{{
         el.style.display="none";
     }}
 }}
