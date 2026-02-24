@@ -950,3 +950,897 @@ if __name__ == "__main__":
         port=8000,
         reload=True
     )
+
+# =====================================================
+# 즐겨찾기 토글
+# =====================================================
+
+@app.post("/fav-toggle")
+def fav_toggle(home: str = Form(...), away: str = Form(...)):
+
+    global FAVORITES
+
+    key = f"{home}__{away}"
+
+    if key in FAVORITES:
+        FAVORITES.remove(key)
+        return {"status": "removed"}
+    else:
+        FAVORITES.append(key)
+        return {"status": "added"}
+
+# =====================================================
+# Strategy1 (Stub)
+# =====================================================
+
+@app.get("/strategy1-view", response_class=HTMLResponse)
+def strategy1_view():
+    return """
+<html><body style='background:#0f1720;color:white;padding:30px;'>
+<h2>🧠 Strategy 1</h2>
+<p>전략 엔진 미구현</p>
+<button onclick="history.back()">← 뒤로</button>
+</body></html>
+"""
+
+
+# =====================================================
+# Strategy2 (Stub)
+# =====================================================
+
+@app.get("/strategy2-view", response_class=HTMLResponse)
+def strategy2_view():
+    return """
+<html><body style='background:#0f1720;color:white;padding:30px;'>
+<h2>🎯 Strategy 2</h2>
+<p>전략 엔진 미구현</p>
+<button onclick="history.back()">← 뒤로</button>
+</body></html>
+"""
+
+
+# =====================================================
+# History (Stub)
+# =====================================================
+
+@app.get("/history", response_class=HTMLResponse)
+def history_view():
+    return """
+<html><body style='background:#0f1720;color:white;padding:30px;'>
+<h2>📊 History</h2>
+<p>전략 히스토리 미구현</p>
+<button onclick="history.back()">← 뒤로</button>
+</body></html>
+"""
+
+
+# =====================================================
+# Evaluate (Stub)
+# =====================================================
+
+@app.get("/evaluate", response_class=HTMLResponse)
+def evaluate_view():
+    return """
+<html><body style='background:#0f1720;color:white;padding:30px;'>
+<h2>🧪 Evaluate</h2>
+<p>백테스트/평가 엔진 미구현</p>
+<button onclick="history.back()">← 뒤로</button>
+</body></html>
+"""
+
+
+# =====================================================
+# Page3 - 팀 분석 (Stub)
+# =====================================================
+
+@app.get("/page3", response_class=HTMLResponse)
+def page3_view(no: str = None, away: int = 0):
+    return f"""
+<html><body style='background:#0f1720;color:white;padding:30px;'>
+<h2>📈 팀 분석</h2>
+<p>경기번호: {no}</p>
+<p>{"원정팀 분석" if away else "홈팀 분석"} 미구현</p>
+<button onclick="history.back()">← 뒤로</button>
+</body></html>
+"""
+
+
+# =====================================================
+# Page4 - 배당 분석 (Stub)
+# =====================================================
+
+@app.get("/page4", response_class=HTMLResponse)
+def page4_view(no: str = None):
+    return f"""
+<html><body style='background:#0f1720;color:white;padding:30px;'>
+<h2>💰 배당 분석</h2>
+<p>경기번호: {no}</p>
+<p>배당 분석 엔진 미구현</p>
+<button onclick="history.back()">← 뒤로</button>
+</body></html>
+"""
+
+# =====================================================
+# 실행부
+# =====================================================
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=8000,
+        reload=True
+    )
+
+# =====================================================
+# 글로벌 예외 핸들러 (운영 안정화)
+# =====================================================
+
+from fastapi.responses import JSONResponse
+from fastapi import Request
+import traceback
+import logging
+
+logging.basicConfig(level=logging.INFO)
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logging.error(f"[ERROR] {request.url} -> {str(exc)}")
+    traceback.print_exc()
+
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": "Internal Server Error",
+            "detail": str(exc)
+        }
+    )
+
+
+# =====================================================
+# 데이터 무결성 점검 API (운영 점검용)
+# =====================================================
+
+@app.get("/system-check")
+def system_check():
+
+    return {
+        "data_rows": len(CURRENT_DF),
+        "five_cond_cache_size": len(FIVE_COND_DIST),
+        "league_count_size": len(LEAGUE_COUNT),
+        "league_weight_size": len(LEAGUE_WEIGHT),
+        "favorites_count": len(FAVORITES),
+        "dist_cache_size": len(DIST_CACHE)
+    }
+
+
+# =====================================================
+# 캐시 강제 초기화 API (운영자 전용)
+# =====================================================
+
+@app.get("/cache-clear")
+def cache_clear():
+
+    DIST_CACHE.clear()
+    SECRET_CACHE.clear()
+    FIVE_COND_DIST.clear()
+    LEAGUE_COUNT.clear()
+    LEAGUE_WEIGHT.clear()
+
+    if not CURRENT_DF.empty:
+        build_five_cond_cache(CURRENT_DF)
+        build_league_weight(CURRENT_DF)
+
+    return {"status": "cache rebuilt"}
+
+# =====================================================
+# 서버 시작 시 상태 로그 출력
+# =====================================================
+
+@app.on_event("startup")
+def startup_log():
+
+    print("=====================================")
+    print(" SecretCore PRO Server Started")
+    print(f" Data Loaded: {not CURRENT_DF.empty}")
+    print(f" Rows: {len(CURRENT_DF)}")
+    print(f" FiveCond Cache: {len(FIVE_COND_DIST)}")
+    print(f" League Weight: {len(LEAGUE_WEIGHT)}")
+    print("=====================================")
+
+
+# =====================================================
+# 서버 종료 시 로그
+# =====================================================
+
+@app.on_event("shutdown")
+def shutdown_log():
+    print("=====================================")
+    print(" SecretCore PRO Server Shutdown")
+    print("=====================================")
+
+
+# =====================================================
+# 로그인 상태 확인 API
+# =====================================================
+
+@app.get("/auth-status")
+def auth_status():
+    return {
+        "logged_in": LOGGED_IN
+    }
+
+
+# =====================================================
+# 현재 데이터 기본 메타 정보 API
+# =====================================================
+
+@app.get("/data-meta")
+def data_meta():
+
+    if CURRENT_DF.empty:
+        return {"status": "no data"}
+
+    return {
+        "rows": len(CURRENT_DF),
+        "columns": CURRENT_DF.shape[1],
+        "leagues": list(LEAGUE_COUNT.keys()),
+        "min_confidence": MIN_CONFIDENCE
+    }
+
+# =====================================================
+# 요청 처리 시간 측정 미들웨어
+# =====================================================
+
+import time
+from fastapi import Response
+
+@app.middleware("http")
+async def process_time_middleware(request, call_next):
+    start_time = time.time()
+    response: Response = await call_next(request)
+    process_time = round((time.time() - start_time) * 1000, 2)
+    response.headers["X-Process-Time-ms"] = str(process_time)
+    return response
+
+
+# =====================================================
+# CURRENT_DF 스냅샷 백업 (운영 안전장치)
+# =====================================================
+
+BACKUP_FILE = "backup_snapshot.csv"
+
+@app.get("/snapshot")
+def snapshot():
+
+    if CURRENT_DF.empty:
+        return {"status": "no data"}
+
+    CURRENT_DF.to_csv(BACKUP_FILE, index=False, encoding="utf-8-sig")
+
+    return {
+        "status": "snapshot saved",
+        "rows": len(CURRENT_DF)
+    }
+
+
+# =====================================================
+# FAVORITES 영구 저장/로드 기능
+# =====================================================
+
+FAVORITES_FILE = "favorites.json"
+
+def save_favorites():
+    with open(FAVORITES_FILE, "w", encoding="utf-8") as f:
+        json.dump(FAVORITES, f, ensure_ascii=False, indent=2)
+
+def load_favorites():
+    global FAVORITES
+    if os.path.exists(FAVORITES_FILE):
+        with open(FAVORITES_FILE, "r", encoding="utf-8") as f:
+            FAVORITES = json.load(f)
+
+load_favorites()
+
+@app.post("/fav-toggle-persist")
+def fav_toggle_persist(home: str = Form(...), away: str = Form(...)):
+
+    global FAVORITES
+
+    key = f"{home}__{away}"
+
+    if key in FAVORITES:
+        FAVORITES.remove(key)
+        save_favorites()
+        return {"status": "removed"}
+    else:
+        FAVORITES.append(key)
+        save_favorites()
+        return {"status": "added"}
+
+
+# =====================================================
+# 간단한 데이터 정합성 점검 확장
+# =====================================================
+
+@app.get("/data-validate")
+def data_validate():
+
+    if CURRENT_DF.empty:
+        return {"status": "no data"}
+
+    issues = []
+
+    if CURRENT_DF.shape[1] != EXPECTED_COLS:
+        issues.append("컬럼 수 불일치")
+
+    if CURRENT_DF.iloc[:, COL_RESULT].isnull().sum() > 0:
+        issues.append("결과 컬럼 null 존재")
+
+    if CURRENT_DF.iloc[:, COL_TYPE].isnull().sum() > 0:
+        issues.append("유형 컬럼 null 존재")
+
+    return {
+        "rows": len(CURRENT_DF),
+        "issues": issues if issues else "정상"
+    }
+
+# =====================================================
+# SECRET 결과 캐싱 적용 버전
+# =====================================================
+
+def secret_score_cached(row, df):
+
+    key = (
+        row.iloc[COL_TYPE],
+        row.iloc[COL_HOMEAWAY],
+        row.iloc[COL_GENERAL],
+        row.iloc[COL_DIR],
+        row.iloc[COL_HANDI],
+        row.iloc[COL_WIN_ODDS],
+        row.iloc[COL_DRAW_ODDS],
+        row.iloc[COL_LOSE_ODDS]
+    )
+
+    if key in SECRET_CACHE:
+        return SECRET_CACHE[key]
+
+    result = secret_score_fast(row, df)
+    SECRET_CACHE[key] = result
+
+    return result
+
+
+# =====================================================
+# 고신뢰도 시크릿픽 전용 API
+# =====================================================
+
+@app.get("/high-confidence")
+def high_confidence(min_conf: float = MIN_CONFIDENCE):
+
+    df = CURRENT_DF
+    if df.empty:
+        return []
+
+    result = []
+
+    base_df = df[df.iloc[:, COL_RESULT] == "경기전"]
+
+    for _, row in base_df.iterrows():
+
+        brain = secret_pick_brain(row, df)
+
+        if brain["confidence"] >= min_conf:
+
+            result.append({
+                "no": row.iloc[COL_NO],
+                "home": row.iloc[COL_HOME],
+                "away": row.iloc[COL_AWAY],
+                "추천": brain["추천"],
+                "confidence": brain["confidence"],
+                "sample": brain["sample"]
+            })
+
+    return result
+
+
+# =====================================================
+# 리그 통계 요약 API
+# =====================================================
+
+@app.get("/league-summary")
+def league_summary():
+
+    if CURRENT_DF.empty:
+        return {"status": "no data"}
+
+    summary = []
+
+    for league, count in LEAGUE_COUNT.items():
+
+        weight = LEAGUE_WEIGHT.get(league, 1.0)
+
+        summary.append({
+            "league": league,
+            "games": count,
+            "weight": weight
+        })
+
+    return sorted(summary, key=lambda x: x["games"], reverse=True)
+
+
+# =====================================================
+# 5조건 전체 통계 조회 API
+# =====================================================
+
+@app.get("/fivecond-summary")
+def fivecond_summary(min_sample: int = 20):
+
+    result = []
+
+    for key, dist in FIVE_COND_DIST.items():
+
+        if dist["총"] >= min_sample:
+
+            result.append({
+                "조건": key,
+                "총경기": dist["총"],
+                "승%": dist["wp"],
+                "무%": dist["dp"],
+                "패%": dist["lp"]
+            })
+
+    return sorted(result, key=lambda x: x["총경기"], reverse=True)
+
+# =====================================================
+# 경기 단건 분석 API (JSON 버전)
+# =====================================================
+
+@app.get("/match-analysis")
+def match_analysis(no: str):
+
+    if CURRENT_DF.empty:
+        return {"status": "no data"}
+
+    row_df = CURRENT_DF[CURRENT_DF.iloc[:, COL_NO] == str(no)]
+
+    if row_df.empty:
+        return {"status": "match not found"}
+
+    row = row_df.iloc[0]
+
+    sec = secret_score_cached(row, CURRENT_DF)
+    brain = secret_pick_brain(row, CURRENT_DF)
+
+    return {
+        "home": row.iloc[COL_HOME],
+        "away": row.iloc[COL_AWAY],
+        "league": row.iloc[COL_LEAGUE],
+        "secret_score": sec,
+        "brain_pick": brain
+    }
+
+
+# =====================================================
+# 최근 N경기 요약 통계 API
+# =====================================================
+
+@app.get("/recent-summary")
+def recent_summary(limit: int = 200):
+
+    if CURRENT_DF.empty:
+        return {"status": "no data"}
+
+    df = CURRENT_DF.tail(limit)
+
+    dist = distribution(df)
+
+    return {
+        "sample_size": len(df),
+        "distribution": dist
+    }
+
+
+# =====================================================
+# EV 기준 상위 경기 추출 API
+# =====================================================
+
+@app.get("/top-ev")
+def top_ev(limit: int = 20):
+
+    if CURRENT_DF.empty:
+        return []
+
+    candidates = []
+
+    base_df = CURRENT_DF[CURRENT_DF.iloc[:, COL_RESULT] == "경기전"]
+
+    for _, row in base_df.iterrows():
+
+        key = (
+            row.iloc[COL_TYPE],
+            row.iloc[COL_HOMEAWAY],
+            row.iloc[COL_GENERAL],
+            row.iloc[COL_DIR],
+            row.iloc[COL_HANDI]
+        )
+
+        dist = FIVE_COND_DIST.get(key)
+
+        if not dist or dist["총"] < 10:
+            continue
+
+        ev_data = safe_ev(dist, row)
+        best_ev = max(ev_data["EV"].values())
+
+        candidates.append({
+            "no": row.iloc[COL_NO],
+            "home": row.iloc[COL_HOME],
+            "away": row.iloc[COL_AWAY],
+            "추천": ev_data["추천"],
+            "EV": round(best_ev, 4),
+            "sample": dist["총"]
+        })
+
+    return sorted(candidates, key=lambda x: x["EV"], reverse=True)[:limit]
+
+
+# =====================================================
+# 서버 내부 상태 전체 리포트 API
+# =====================================================
+
+@app.get("/system-report")
+def system_report():
+
+    return {
+        "rows": len(CURRENT_DF),
+        "five_cond_cache": len(FIVE_COND_DIST),
+        "league_count": len(LEAGUE_COUNT),
+        "favorites": len(FAVORITES),
+        "dist_cache": len(DIST_CACHE),
+        "secret_cache": len(SECRET_CACHE)
+    }
+
+# =====================================================
+# 전략 성능 시뮬레이션 API (단순 누적 EV 기반)
+# =====================================================
+
+@app.get("/strategy-sim")
+def strategy_sim(min_sample: int = 20):
+
+    if CURRENT_DF.empty:
+        return {"status": "no data"}
+
+    total_ev = 0
+    bet_count = 0
+
+    df = CURRENT_DF[CURRENT_DF.iloc[:, COL_RESULT] != "경기전"]
+
+    for _, row in df.iterrows():
+
+        key = (
+            row.iloc[COL_TYPE],
+            row.iloc[COL_HOMEAWAY],
+            row.iloc[COL_GENERAL],
+            row.iloc[COL_DIR],
+            row.iloc[COL_HANDI]
+        )
+
+        dist = FIVE_COND_DIST.get(key)
+
+        if not dist or dist["총"] < min_sample:
+            continue
+
+        ev_data = safe_ev(dist, row)
+        pick = ev_data["추천"]
+
+        actual = row.iloc[COL_RESULT]
+
+        odds_map = {
+            "승": float(row.iloc[COL_WIN_ODDS]),
+            "무": float(row.iloc[COL_DRAW_ODDS]),
+            "패": float(row.iloc[COL_LOSE_ODDS])
+        }
+
+        if pick == actual:
+            total_ev += odds_map[pick] - 1
+        else:
+            total_ev -= 1
+
+        bet_count += 1
+
+    roi = round((total_ev / bet_count), 4) if bet_count > 0 else 0
+
+    return {
+        "bets": bet_count,
+        "total_profit": round(total_ev, 4),
+        "ROI": roi
+    }
+
+
+# =====================================================
+# 리스크 등급 분류 API
+# =====================================================
+
+@app.get("/risk-grade")
+def risk_grade(no: str):
+
+    if CURRENT_DF.empty:
+        return {"status": "no data"}
+
+    row_df = CURRENT_DF[CURRENT_DF.iloc[:, COL_NO] == str(no)]
+
+    if row_df.empty:
+        return {"status": "match not found"}
+
+    row = row_df.iloc[0]
+    brain = secret_pick_brain(row, CURRENT_DF)
+
+    conf = brain["confidence"]
+
+    if conf >= 0.65:
+        grade = "A"
+    elif conf >= 0.50:
+        grade = "B"
+    elif conf >= 0.40:
+        grade = "C"
+    else:
+        grade = "D"
+
+    return {
+        "home": row.iloc[COL_HOME],
+        "away": row.iloc[COL_AWAY],
+        "confidence": conf,
+        "risk_grade": grade
+    }
+
+
+# =====================================================
+# 배당 왜곡 탐지 API (이론확률 vs 시장확률)
+# =====================================================
+
+@app.get("/odds-anomaly")
+def odds_anomaly(no: str):
+
+    if CURRENT_DF.empty:
+        return {"status": "no data"}
+
+    row_df = CURRENT_DF[CURRENT_DF.iloc[:, COL_NO] == str(no)]
+
+    if row_df.empty:
+        return {"status": "match not found"}
+
+    row = row_df.iloc[0]
+
+    try:
+        win_odds  = float(row.iloc[COL_WIN_ODDS])
+        draw_odds = float(row.iloc[COL_DRAW_ODDS])
+        lose_odds = float(row.iloc[COL_LOSE_ODDS])
+    except:
+        return {"status": "invalid odds"}
+
+    implied_total = (1/win_odds) + (1/draw_odds) + (1/lose_odds)
+    margin = round((implied_total - 1) * 100, 2)
+
+    return {
+        "home": row.iloc[COL_HOME],
+        "away": row.iloc[COL_AWAY],
+        "market_margin_percent": margin
+    }
+
+
+# =====================================================
+# 전체 엔진 성능 요약 API
+# =====================================================
+
+@app.get("/engine-performance")
+def engine_performance():
+
+    if CURRENT_DF.empty:
+        return {"status": "no data"}
+
+    completed = CURRENT_DF[CURRENT_DF.iloc[:, COL_RESULT] != "경기전"]
+
+    total = len(completed)
+    wins = (completed.iloc[:, COL_RESULT] == "승").sum()
+    draws = (completed.iloc[:, COL_RESULT] == "무").sum()
+    loses = (completed.iloc[:, COL_RESULT] == "패").sum()
+
+    return {
+        "completed_matches": total,
+        "승": int(wins),
+        "무": int(draws),
+        "패": int(loses)
+    }
+
+# =====================================================
+# 동적 리그 가중 재계산 API
+# =====================================================
+
+@app.get("/reweight-league")
+def reweight_league(scale_high: float = 1.1,
+                    scale_mid: float = 1.0,
+                    scale_low: float = 0.9):
+
+    global LEAGUE_WEIGHT
+
+    if CURRENT_DF.empty:
+        return {"status": "no data"}
+
+    league_counts = CURRENT_DF.iloc[:, COL_LEAGUE].value_counts()
+
+    for league, count in league_counts.items():
+
+        if count >= 800:
+            LEAGUE_WEIGHT[league] = scale_high
+        elif count >= 300:
+            LEAGUE_WEIGHT[league] = scale_mid
+        else:
+            LEAGUE_WEIGHT[league] = scale_low
+
+    return {
+        "status": "reweighted",
+        "league_weight_size": len(LEAGUE_WEIGHT)
+    }
+
+
+# =====================================================
+# 고EV + 고신뢰도 복합 필터 API
+# =====================================================
+
+@app.get("/elite-picks")
+def elite_picks(min_ev: float = 0.05,
+                min_conf: float = 0.45):
+
+    if CURRENT_DF.empty:
+        return []
+
+    result = []
+
+    base_df = CURRENT_DF[CURRENT_DF.iloc[:, COL_RESULT] == "경기전"]
+
+    for _, row in base_df.iterrows():
+
+        key = (
+            row.iloc[COL_TYPE],
+            row.iloc[COL_HOMEAWAY],
+            row.iloc[COL_GENERAL],
+            row.iloc[COL_DIR],
+            row.iloc[COL_HANDI]
+        )
+
+        dist = FIVE_COND_DIST.get(key)
+
+        if not dist or dist["총"] < 20:
+            continue
+
+        ev_data = safe_ev(dist, row)
+        best_ev = max(ev_data["EV"].values())
+
+        brain = secret_pick_brain(row, CURRENT_DF)
+
+        if best_ev >= min_ev and brain["confidence"] >= min_conf:
+
+            result.append({
+                "no": row.iloc[COL_NO],
+                "home": row.iloc[COL_HOME],
+                "away": row.iloc[COL_AWAY],
+                "EV": round(best_ev, 4),
+                "confidence": brain["confidence"],
+                "추천": brain["추천"]
+            })
+
+    return sorted(result, key=lambda x: (x["confidence"], x["EV"]), reverse=True)
+
+
+# =====================================================
+# 장기 ROI 추적 API (회차 기준)
+# =====================================================
+
+@app.get("/round-roi")
+def round_roi():
+
+    if CURRENT_DF.empty:
+        return {"status": "no data"}
+
+    completed = CURRENT_DF[CURRENT_DF.iloc[:, COL_RESULT] != "경기전"]
+
+    round_group = completed.groupby(completed.iloc[:, COL_ROUND])
+
+    report = []
+
+    for rnd, group in round_group:
+
+        profit = 0
+        bets = 0
+
+        for _, row in group.iterrows():
+
+            key = (
+                row.iloc[COL_TYPE],
+                row.iloc[COL_HOMEAWAY],
+                row.iloc[COL_GENERAL],
+                row.iloc[COL_DIR],
+                row.iloc[COL_HANDI]
+            )
+
+            dist = FIVE_COND_DIST.get(key)
+
+            if not dist or dist["총"] < 20:
+                continue
+
+            ev_data = safe_ev(dist, row)
+            pick = ev_data["추천"]
+            actual = row.iloc[COL_RESULT]
+
+            odds_map = {
+                "승": float(row.iloc[COL_WIN_ODDS]),
+                "무": float(row.iloc[COL_DRAW_ODDS]),
+                "패": float(row.iloc[COL_LOSE_ODDS])
+            }
+
+            if pick == actual:
+                profit += odds_map[pick] - 1
+            else:
+                profit -= 1
+
+            bets += 1
+
+        roi = round((profit / bets), 4) if bets > 0 else 0
+
+        report.append({
+            "round": rnd,
+            "bets": bets,
+            "ROI": roi
+        })
+
+    return sorted(report, key=lambda x: x["round"])
+
+
+# =====================================================
+# EV 분포 히스토그램 데이터 API
+# =====================================================
+
+@app.get("/ev-distribution")
+def ev_distribution():
+
+    if CURRENT_DF.empty:
+        return {"status": "no data"}
+
+    bins = {
+        "negative": 0,
+        "0~0.05": 0,
+        "0.05~0.1": 0,
+        "0.1+": 0
+    }
+
+    base_df = CURRENT_DF[CURRENT_DF.iloc[:, COL_RESULT] == "경기전"]
+
+    for _, row in base_df.iterrows():
+
+        key = (
+            row.iloc[COL_TYPE],
+            row.iloc[COL_HOMEAWAY],
+            row.iloc[COL_GENERAL],
+            row.iloc[COL_DIR],
+            row.iloc[COL_HANDI]
+        )
+
+        dist = FIVE_COND_DIST.get(key)
+        if not dist or dist["총"] < 10:
+            continue
+
+        ev_data = safe_ev(dist, row)
+        best_ev = max(ev_data["EV"].values())
+
+        if best_ev < 0:
+            bins["negative"] += 1
+        elif best_ev < 0.05:
+            bins["0~0.05"] += 1
+        elif best_ev < 0.1:
+            bins["0.05~0.1"] += 1
+        else:
+            bins["0.1+"] += 1
+
+    return bins
