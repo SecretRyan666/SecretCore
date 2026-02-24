@@ -191,6 +191,7 @@ def distribution(df):
 
     DIST_CACHE[key] = result
     return result
+
 # =====================================================
 # 5조건 사전 집계 캐시 생성
 # =====================================================
@@ -346,7 +347,6 @@ def secret_score_cached(row, df):
 
     return result
 
-
 # =====================================================
 # SecretPick Brain
 # =====================================================
@@ -412,6 +412,7 @@ def secret_pick_brain(row, df):
         "weight_5cond": w5,
         "league_weight": league_weight
     }
+
 # =====================================================
 # 로그인
 # =====================================================
@@ -437,7 +438,6 @@ def logout():
 def auth_status():
     return {"logged_in": LOGGED_IN}
 
-
 # =====================================================
 # 업로드 페이지
 # =====================================================
@@ -461,7 +461,6 @@ def page_upload():
 </body>
 </html>
 """
-
 
 # =====================================================
 # 업로드 처리
@@ -495,7 +494,6 @@ def upload(file: UploadFile = File(...)):
     build_league_weight(CURRENT_DF)
 
     return RedirectResponse("/", status_code=302)
-
 
 # =====================================================
 # Health Check
@@ -531,7 +529,6 @@ def self_check():
 def health():
     return {"self_check": self_check()}
 
-
 # =====================================================
 # 필터 값 추출 API
 # =====================================================
@@ -551,7 +548,6 @@ def filters():
         "dir": sorted(df.iloc[:, COL_DIR].dropna().unique().tolist()),
         "handi": sorted(df.iloc[:, COL_HANDI].dropna().unique().tolist())
     }
-
 
 # =====================================================
 # 경기목록 API
@@ -790,6 +786,7 @@ load();
 </body>
 </html>
 """
+
 # =====================================================
 # PRO 막대그래프
 # =====================================================
@@ -811,7 +808,6 @@ height:100%;
 border-radius:999px;"></div>
 </div>
 """
-
 
 # =====================================================
 # Page2 - 상세 분석
@@ -923,6 +919,7 @@ font-family:Arial;padding:20px;">
 </body>
 </html>
 """
+
 # =====================================================
 # Page3 - 팀 분석
 # =====================================================
@@ -945,18 +942,16 @@ def page3_view(no: str = None, away: int = 0):
     team_name = row.iloc[COL_AWAY] if away else row.iloc[COL_HOME]
     league = row.iloc[COL_LEAGUE]
 
-    # 해당 팀 전체 과거 경기
     team_df = CURRENT_DF[
         (CURRENT_DF.iloc[:, COL_HOME] == team_name) |
         (CURRENT_DF.iloc[:, COL_AWAY] == team_name)
     ]
 
-    # 완료 경기만 분석
     team_df = team_df[team_df.iloc[:, COL_RESULT] != "경기전"]
 
     dist = distribution(team_df)
 
-    return f"""
+    html = f"""
 <html>
 <body style="background:#0f1720;color:white;
 font-family:Arial;padding:30px;">
@@ -989,19 +984,21 @@ padding:20px;border-radius:18px;display:block;">
 <button onclick="history.back()">← 뒤로</button>
 
 <script>
-function toggleBox(id){
+function toggleBox(id) {{
     var el = document.getElementById(id);
-    if(el.style.display==="none"){
+    if(el.style.display==="none") {{
         el.style.display="block";
-    }else{
+    }} else {{
         el.style.display="none";
-    }
-}
+    }}
+}}
 </script>
 
 </body>
 </html>
 """
+    return html
+
 # =====================================================
 # Page4 - 배당 분석
 # =====================================================
@@ -1107,6 +1104,7 @@ function toggleBox(id){
 </body>
 </html>
 """
+
 # =====================================================
 # 고신뢰도 시크릿픽 전용 API
 # =====================================================
@@ -1137,7 +1135,6 @@ def high_confidence(min_conf: float = MIN_CONFIDENCE):
             })
 
     return result
-
 
 # =====================================================
 # EV 기준 상위 경기 추출 API
@@ -1181,7 +1178,6 @@ def top_ev(limit: int = 20):
         })
 
     return sorted(candidates, key=lambda x: x["EV"], reverse=True)[:limit]
-
 
 # =====================================================
 # 고EV + 고신뢰도 복합 필터 API
@@ -1230,6 +1226,7 @@ def elite_picks(min_ev: float = 0.05,
             })
 
     return sorted(result, key=lambda x: (x["confidence"], x["EV"]), reverse=True)
+
 # =====================================================
 # 전략 성능 시뮬레이션 API (누적 EV 기반)
 # =====================================================
@@ -1285,7 +1282,6 @@ def strategy_sim(min_sample: int = 20):
         "ROI": roi
     }
 
-
 # =====================================================
 # 리스크 등급 분류 API
 # =====================================================
@@ -1320,7 +1316,6 @@ def risk_grade(no: str):
         "confidence": conf,
         "risk_grade": grade
     }
-
 
 # =====================================================
 # 회차별 ROI 추적 API
@@ -1384,6 +1379,7 @@ def round_roi():
         })
 
     return sorted(report, key=lambda x: x["round"])
+
 # =====================================================
 # 시스템 상태 리포트
 # =====================================================
@@ -1400,7 +1396,6 @@ def system_report():
         "dist_cache": len(DIST_CACHE),
         "secret_cache": len(SECRET_CACHE)
     }
-
 
 # =====================================================
 # 데이터 정합성 점검
@@ -1428,7 +1423,6 @@ def data_validate():
         "issues": issues if issues else "정상"
     }
 
-
 # =====================================================
 # 캐시 강제 초기화
 # =====================================================
@@ -1452,7 +1446,6 @@ def cache_clear():
         "league_weight": len(LEAGUE_WEIGHT)
     }
 
-
 # =====================================================
 # 요청 처리 시간 측정 미들웨어
 # =====================================================
@@ -1464,7 +1457,6 @@ async def process_time_middleware(request, call_next):
     process_time = round((time.time() - start_time) * 1000, 2)
     response.headers["X-Process-Time-ms"] = str(process_time)
     return response
-
 
 # =====================================================
 # 글로벌 예외 핸들러
@@ -1482,7 +1474,6 @@ async def global_exception_handler(request: Request, exc: Exception):
             "detail": str(exc)
         }
     )
-
 
 # =====================================================
 # 서버 시작 / 종료 로그
