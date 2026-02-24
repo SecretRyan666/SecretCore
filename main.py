@@ -1029,7 +1029,6 @@ def page4_view(no: str = None):
     except:
         return "<h2>배당 데이터 오류</h2>"
 
-    # 동일 배당 경기 추출
     odds_df = CURRENT_DF[
         (CURRENT_DF.iloc[:, COL_WIN_ODDS]  == row.iloc[COL_WIN_ODDS]) &
         (CURRENT_DF.iloc[:, COL_DRAW_ODDS] == row.iloc[COL_DRAW_ODDS]) &
@@ -1039,13 +1038,12 @@ def page4_view(no: str = None):
     odds_df = odds_df[odds_df.iloc[:, COL_RESULT] != "경기전"]
 
     dist = distribution(odds_df)
-
     ev_data = safe_ev(dist, row)
 
     implied_total = (1/win_odds) + (1/draw_odds) + (1/lose_odds)
     margin = round((implied_total - 1) * 100, 2)
 
-    return f"""
+    html = f"""
 <html>
 <body style="background:#0f1720;color:white;
 font-family:Arial;padding:30px;">
@@ -1091,19 +1089,20 @@ padding:20px;border-radius:18px;margin-top:12px;">
 <button onclick="history.back()">← 뒤로</button>
 
 <script>
-function toggleBox(id){
+function toggleBox(id) {{
     var el = document.getElementById(id);
-    if(el.style.display==="none"){
+    if(el.style.display==="none") {{
         el.style.display="block";
-    }else{
+    }} else {{
         el.style.display="none";
-    }
-}
+    }}
+}}
 </script>
 
 </body>
 </html>
 """
+    return html
 
 # =====================================================
 # 고신뢰도 시크릿픽 전용 API
