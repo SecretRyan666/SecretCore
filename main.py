@@ -200,203 +200,231 @@ def distribution(df):
 
 # =====================================================
 # SecretCore PRO - Final Code
-# PART 1
-# Core Structure / Global / Data Load / Builders / Filters / Distribution
+# PART 2
+# Cache Builders / League Weight / EV / Secret Engine Core
 # =====================================================
 
-from fastapi import FastAPI, UploadFile, File, Form, Request
-from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
-from fastapi import Response
-import pandas as pd
-import os
-import json
-import time
-import traceback
-import logging
-
-app = FastAPI()
-
 # =====================================================
-# 절대참조 인덱스 (고정 구조)
+# 5조건 사전 집계 캐시 생성
 # =====================================================
 
-COL_NO        = 0
-COL_YEAR      = 1
-COL_ROUND     = 2
-COL_MATCH     = 3
-COL_SPORT     = 4
-COL_LEAGUE    = 5
-COL_HOME      = 6
-COL_AWAY      = 7
-COL_WIN_ODDS  = 8
-COL_DRAW_ODDS = 9
-COL_LOSE_ODDS = 10
-COL_GENERAL   = 11
-COL_HANDI     = 12
-COL_RESULT    = 13
-COL_TYPE      = 14
-COL_DIR       = 15
-COL_HOMEAWAY  = 16
+def build_five_cond_cache(df):
+    global FIVE_COND_DIST
+    FIVE_COND_DIST.clear()
 
-EXPECTED_COLS = 17
-DATA_FILE = "current_data.csv"
-BACKUP_FILE = "backup_snapshot.csv"
-FAVORITES_FILE = "favorites.json"
-
-# =====================================================
-# 글로벌 상태
-# =====================================================
-
-CURRENT_DF = pd.DataFrame()
-LOGGED_IN = False
-FAVORITES = []
-
-DIST_CACHE = {}
-SECRET_CACHE = {}
-
-LEAGUE_COUNT = {}
-LEAGUE_WEIGHT = {}
-FIVE_COND_DIST = {}
-
-MIN_CONFIDENCE = 0.32
-
-logging.basicConfig(level=logging.INFO)
-
-# =====================================================
-# 데이터 로드
-# =====================================================
-
-def load_data():
-    global CURRENT_DF
-
-    if not os.path.exists(DATA_FILE):
-        CURRENT_DF = pd.DataFrame()
+    if df.empty:
         return
 
-    df = pd.read_csv(
-        DATA_FILE,
-        encoding="utf-8-sig",
-        dtype=str,
-        low_memory=False
+    group_cols = [
+        COL_TYPE,
+        COL_HOMEAWAY,
+        COL_GENERAL,
+        COL_DIR,
+        COL_HANDI
+    ]
+
+    grouped = df.groupby(
+        df.columns[group_cols].tolist() + [df.columns[COL_RESULT]]
+    ).size().unstack(fill_value=0)
+
+    for key, row in grouped.iterrows():
+
+        total = row.sum()
+
+        FIVE_COND_DIST[key] = {
+            "총": int(total),
+            "승": int(row.get("승", 0)),
+            "무": int(row.get("무", 0)),
+            "패": int(row.get("패", 0)),
+        }
+
+        if total > 0:
+            FIVE_COND_DIST[key]["wp"] = round(row.get("승", 0)/total*100,2)
+            FIVE_COND_DIST[key]["dp"] = round(row.get("무", 0)/total*100,2)
+            FIVE_COND_DIST[key]["lp"] = round(row.get("패", 0)/total*100,2)
+        else:
+            FIVE_COND_DIST[key]["wp"] = 0
+            FIVE_COND_DIST[key]["dp"] = 0
+            FIVE_COND_DIST[key]["lp"] = 0
+
+
+# =====================================================
+# 리그 가중치 생성
+# =====================================================
+
+def build_league_weight(df):
+
+    global LEAGUE_COUNT, LEAGUE_WEIGHT
+
+    LEAGUE_COUNT.clear()
+    LEAGUE_WEIGHT.clear()
+
+    if df.empty:
+        return
+
+    league_counts = df.iloc[:, COL_LEAGUE].value_counts()
+
+    for league, count in league_counts.items():
+
+        LEAGUE_COUNT[league] = int(count)
+
+        if count >= 800:
+            LEAGUE_WEIGHT[league] = 1.05
+        elif count >= 300:
+            LEAGUE_WEIGHT[league] = 1.00
+        else:
+            LEAGUE_WEIGHT[league] = 0.90
+
+
+# =====================================================
+# EV 계산
+# =====================================================
+
+def safe_ev(dist, row):
+
+    try:
+        win_odds  = float(row.iloc[COL_WIN_ODDS])
+        draw_odds = float(row.iloc[COL_DRAW_ODDS])
+        lose_odds = float(row.iloc[COL_LOSE_ODDS])
+    except:
+        return {"EV": {"승":0,"무":0,"패":0}, "추천":"없음"}
+
+    ev_w = dist["wp"]/100 * win_odds  - 1
+    ev_d = dist["dp"]/100 * draw_odds - 1
+    ev_l = dist["lp"]/100 * lose_odds - 1
+
+    ev_map = {"승":ev_w, "무":ev_d, "패":ev_l}
+    best = max(ev_map, key=ev_map.get)
+
+    return {
+        "EV":{
+            "승":round(ev_w,3),
+            "무":round(ev_d,3),
+            "패":round(ev_l,3)
+        },
+        "추천":best
+    }
+
+
+# =====================================================
+# Secret Score (캐싱 적용)
+# =====================================================
+
+def secret_score_fast(row, df):
+
+    key = (
+        row.iloc[COL_TYPE],
+        row.iloc[COL_HOMEAWAY],
+        row.iloc[COL_GENERAL],
+        row.iloc[COL_DIR],
+        row.iloc[COL_HANDI]
     )
 
-    if df.shape[1] != EXPECTED_COLS:
-        CURRENT_DF = pd.DataFrame()
-        return
+    dist = FIVE_COND_DIST.get(key, {
+        "총":0,"승":0,"무":0,"패":0,
+        "wp":0,"dp":0,"lp":0
+    })
 
-    CURRENT_DF = df
+    if dist["총"] < 10:
+        return {"score":0,"sample":dist["총"],"추천":"없음"}
 
-    build_five_cond_cache(CURRENT_DF)
-    build_league_weight(CURRENT_DF)
+    ev_data = safe_ev(dist, row)
+    best_ev = max(ev_data["EV"].values())
 
-load_data()
-
-# =====================================================
-# 조건 빌더
-# =====================================================
-
-def build_5cond(row):
     return {
-        COL_TYPE:      row.iloc[COL_TYPE],
-        COL_HOMEAWAY:  row.iloc[COL_HOMEAWAY],
-        COL_GENERAL:   row.iloc[COL_GENERAL],
-        COL_DIR:       row.iloc[COL_DIR],
-        COL_HANDI:     row.iloc[COL_HANDI]
+        "score":round(best_ev,4),
+        "sample":dist["총"],
+        "추천":ev_data["추천"]
     }
 
-def build_league_cond(row):
-    cond = build_5cond(row)
-    cond[COL_LEAGUE] = row.iloc[COL_LEAGUE]
-    return cond
 
-# =====================================================
-# 필터 처리
-# =====================================================
+def secret_score_cached(row, df):
 
-def apply_filters(df, type, homeaway, general, dir, handi):
+    key = (
+        row.iloc[COL_TYPE],
+        row.iloc[COL_HOMEAWAY],
+        row.iloc[COL_GENERAL],
+        row.iloc[COL_DIR],
+        row.iloc[COL_HANDI],
+        row.iloc[COL_WIN_ODDS],
+        row.iloc[COL_DRAW_ODDS],
+        row.iloc[COL_LOSE_ODDS]
+    )
 
-    if type:
-        df = df[df.iloc[:, COL_TYPE].isin(type.split(","))]
+    if key in SECRET_CACHE:
+        return SECRET_CACHE[key]
 
-    if homeaway:
-        df = df[df.iloc[:, COL_HOMEAWAY].isin(homeaway.split(","))]
+    result = secret_score_fast(row, df)
+    SECRET_CACHE[key] = result
 
-    if general:
-        df = df[df.iloc[:, COL_GENERAL].isin(general.split(","))]
-
-    if dir:
-        df = df[df.iloc[:, COL_DIR].isin(dir.split(","))]
-
-    if handi:
-        df = df[df.iloc[:, COL_HANDI].isin(handi.split(","))]
-
-    return df
-
-
-def filter_text(type, homeaway, general, dir, handi):
-
-    parts = []
-
-    if type: parts.append(f"유형={type}")
-    if homeaway: parts.append(f"홈/원정={homeaway}")
-    if general: parts.append(f"일반={general}")
-    if dir: parts.append(f"정역={dir}")
-    if handi: parts.append(f"핸디={handi}")
-
-    return " · ".join(parts) if parts else "기본조건"
-
-
-def run_filter(df, conditions: dict):
-
-    filtered = df
-
-    for col_idx, val in conditions.items():
-        if val is None:
-            continue
-        filtered = filtered[filtered.iloc[:, col_idx] == val]
-
-    return filtered
-
-# =====================================================
-# 분포 계산 (캐시 적용)
-# =====================================================
-
-def distribution(df):
-
-    key = tuple(df.index)
-
-    if key in DIST_CACHE:
-        return DIST_CACHE[key]
-
-    total = len(df)
-
-    if total == 0:
-        result = {"총":0,"승":0,"무":0,"패":0,"wp":0,"dp":0,"lp":0}
-        DIST_CACHE[key] = result
-        return result
-
-    result_col = df.iloc[:, COL_RESULT]
-
-    win  = (result_col == "승").sum()
-    draw = (result_col == "무").sum()
-    lose = (result_col == "패").sum()
-
-    wp = round(win/total*100,2)
-    dp = round(draw/total*100,2)
-    lp = round(lose/total*100,2)
-
-    result = {
-        "총":int(total),
-        "승":int(win),
-        "무":int(draw),
-        "패":int(lose),
-        "wp":wp,
-        "dp":dp,
-        "lp":lp
-    }
-
-    DIST_CACHE[key] = result
     return result
+
+
+# =====================================================
+# SecretPick Brain
+# =====================================================
+
+def secret_pick_brain(row, df):
+
+    key = (
+        row.iloc[COL_TYPE],
+        row.iloc[COL_HOMEAWAY],
+        row.iloc[COL_GENERAL],
+        row.iloc[COL_DIR],
+        row.iloc[COL_HANDI]
+    )
+
+    p5 = FIVE_COND_DIST.get(key, {
+        "총":0,
+        "wp":0,"dp":0,"lp":0
+    })
+
+    sample = p5.get("총",0)
+
+    if sample < 20:
+        w5 = 0.4
+    elif sample < 50:
+        w5 = 0.5
+    elif sample < 150:
+        w5 = 0.65
+    else:
+        w5 = 0.75
+
+    w_exact = 1 - w5
+
+    exact_df = df[
+        (df.iloc[:, COL_WIN_ODDS]  == row.iloc[COL_WIN_ODDS]) &
+        (df.iloc[:, COL_DRAW_ODDS] == row.iloc[COL_DRAW_ODDS]) &
+        (df.iloc[:, COL_LOSE_ODDS] == row.iloc[COL_LOSE_ODDS])
+    ]
+
+    exact_dist = distribution(exact_df)
+
+    sp_w = w5*p5.get("wp",0) + w_exact*exact_dist.get("wp",0)
+    sp_d = w5*p5.get("dp",0) + w_exact*exact_dist.get("dp",0)
+    sp_l = w5*p5.get("lp",0) + w_exact*exact_dist.get("lp",0)
+
+    sp_map = {
+        "승": round(sp_w,2),
+        "무": round(sp_d,2),
+        "패": round(sp_l,2)
+    }
+
+    best = max(sp_map, key=sp_map.get)
+
+    league = row.iloc[COL_LEAGUE]
+    league_weight = LEAGUE_WEIGHT.get(league, 1.0)
+
+    adjusted_conf = round((sp_map[best] / 100) * league_weight, 3)
+
+    return {
+        "추천": best,
+        "확률": sp_map,
+        "confidence": adjusted_conf,
+        "sample": sample,
+        "weight_5cond": w5,
+        "league_weight": league_weight
+    }
 
 # =====================================================
 # SecretCore PRO - Final Code
@@ -749,7 +777,6 @@ let data = await r.json();
 let text="";
 if(data.length>0){
 let first=data[0].row;
-/* 회차 중복 출력 방지: 년도만 표시 */
 text = first[1] + "년";
 }else{
 text="경기 없음";
@@ -862,7 +889,7 @@ def detail(
     league_df = run_filter(filtered_df, league_cond)
     league_dist = distribution(league_df)
 
-    # EV
+    # EV 분석
     secret_data = safe_ev(base_dist, row)
 
     condition_str = filter_text(type, homeaway, general, dir, handi)
@@ -934,7 +961,7 @@ font-family:Arial;padding:20px;">
 # =====================================================
 # SecretCore PRO - Final Code
 # PART 6
-# Page3 - 팀 분석 (분포도 구현 버전)
+# Page3 - 팀 분석
 # =====================================================
 
 @app.get("/page3", response_class=HTMLResponse)
@@ -1000,7 +1027,7 @@ font-family:Arial;padding:30px;">
 # =====================================================
 # SecretCore PRO - Final Code
 # PART 7
-# Page4 - 배당 분석 (분포 + EV + 마진)
+# Page4 - 배당 분석
 # =====================================================
 
 @app.get("/page4", response_class=HTMLResponse)
@@ -1097,7 +1124,7 @@ font-family:Arial;padding:30px;">
 # =====================================================
 # SecretCore PRO - Final Code
 # PART 8
-# 운영 분석 / 고급 통계 API 세트
+# 고급 분석 API 세트
 # =====================================================
 
 # =====================================================
@@ -1227,7 +1254,7 @@ def elite_picks(min_ev: float = 0.05,
 # =====================================================
 # SecretCore PRO - Final Code
 # PART 9
-# 전략 성능 / ROI / 리스크 / 엔진 분석 API
+# 전략 성능 / ROI / 리스크 / 회차 분석 API
 # =====================================================
 
 # =====================================================
@@ -1388,7 +1415,7 @@ def round_roi():
 # =====================================================
 # SecretCore PRO - Final Code
 # PART 10
-# 시스템 관리 / 안정화 / 성능 분석 API
+# 시스템 관리 / 안정화 / 성능 관리
 # =====================================================
 
 # =====================================================
@@ -1464,9 +1491,6 @@ def cache_clear():
 # 요청 처리 시간 측정 미들웨어
 # =====================================================
 
-import time
-from fastapi import Response
-
 @app.middleware("http")
 async def process_time_middleware(request, call_next):
     start_time = time.time()
@@ -1474,6 +1498,24 @@ async def process_time_middleware(request, call_next):
     process_time = round((time.time() - start_time) * 1000, 2)
     response.headers["X-Process-Time-ms"] = str(process_time)
     return response
+
+
+# =====================================================
+# 글로벌 예외 핸들러
+# =====================================================
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logging.error(f"[ERROR] {request.url} -> {str(exc)}")
+    traceback.print_exc()
+
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": "Internal Server Error",
+            "detail": str(exc)
+        }
+    )
 
 
 # =====================================================
