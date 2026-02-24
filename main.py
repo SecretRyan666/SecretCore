@@ -1,9 +1,3 @@
-# =====================================================
-# SecretCore PRO - Final Code
-# PART 1
-# Core Structure / Global / Data Load / Builders / Filters / Distribution
-# =====================================================
-
 from fastapi import FastAPI, UploadFile, File, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi import Response
@@ -197,12 +191,6 @@ def distribution(df):
 
     DIST_CACHE[key] = result
     return result
-
-# =====================================================
-# SecretCore PRO - Final Code
-# PART 2
-# Cache Builders / League Weight / EV / Secret Engine Core
-# =====================================================
 
 # =====================================================
 # 5조건 사전 집계 캐시 생성
@@ -427,12 +415,6 @@ def secret_pick_brain(row, df):
     }
 
 # =====================================================
-# SecretCore PRO - Final Code
-# PART 3
-# Authentication / Upload / Health / Filters / Matches API
-# =====================================================
-
-# =====================================================
 # 로그인
 # =====================================================
 
@@ -624,12 +606,6 @@ def matches(
 
     return result
 
-# =====================================================
-# SecretCore PRO - Final Code
-# PART 4
-# Page1 UI (메인화면)
-# =====================================================
-
 @app.get("/", response_class=HTMLResponse)
 def home():
 
@@ -777,7 +753,7 @@ let data = await r.json();
 let text="";
 if(data.length>0){
 let first=data[0].row;
-text = first[1] + "년";
+text = first[1] + "년 · " + first[2] + "회차";
 }else{
 text="경기 없음";
 }
@@ -817,12 +793,6 @@ load();
 </body>
 </html>
 """
-
-# =====================================================
-# SecretCore PRO - Final Code
-# PART 5
-# 상세 분석 Page2 (/detail)
-# =====================================================
 
 # =====================================================
 # PRO 막대그래프
@@ -959,8 +929,6 @@ font-family:Arial;padding:20px;">
 """
 
 # =====================================================
-# SecretCore PRO - Final Code
-# PART 6
 # Page3 - 팀 분석
 # =====================================================
 
@@ -1003,7 +971,12 @@ font-family:Arial;padding:30px;">
 리그: {league}
 </div>
 
-<div style="background:#1e293b;padding:20px;border-radius:18px;">
+<button onclick="toggleBox('box1')" 
+style="margin-bottom:12px;">📊 분포 보기/숨기기</button>
+
+<div id="box1" style="background:#1e293b;
+padding:20px;border-radius:18px;display:block;">
+
 <h3>전체 분포 ({dist["총"]}경기)</h3>
 
 <div>승 {dist["wp"]}% ({dist["승"]}경기)</div>
@@ -1020,13 +993,22 @@ font-family:Arial;padding:30px;">
 <br><br>
 <button onclick="history.back()">← 뒤로</button>
 
+<script>
+function toggleBox(id){
+    var el = document.getElementById(id);
+    if(el.style.display==="none"){
+        el.style.display="block";
+    }else{
+        el.style.display="none";
+    }
+}
+</script>
+
 </body>
 </html>
 """
 
 # =====================================================
-# SecretCore PRO - Final Code
-# PART 7
 # Page4 - 배당 분석
 # =====================================================
 
@@ -1080,13 +1062,11 @@ font-family:Arial;padding:30px;">
 <h2>💰 배당 분석</h2>
 <h3>[{league}] {home} vs {away}</h3>
 
-<div style="opacity:0.7;font-size:12px;margin-bottom:20px;">
-동일 배당 표본: {dist["총"]}경기
-</div>
+<button onclick="toggleBox('box1')">📊 분포 보기/숨기기</button>
+<div id="box1" style="background:#1e293b;
+padding:20px;border-radius:18px;margin-top:12px;">
 
-<div style="background:#1e293b;padding:20px;border-radius:18px;">
-
-<h3>배당 분포</h3>
+<h3>배당 분포 ({dist["총"]}경기)</h3>
 
 <div>승 {dist["wp"]}% ({dist["승"]}경기)</div>
 {bar_html(dist["wp"],"win")}
@@ -1101,7 +1081,9 @@ font-family:Arial;padding:30px;">
 
 <br>
 
-<div style="background:#1e293b;padding:20px;border-radius:18px;">
+<button onclick="toggleBox('box2')">📈 EV 보기/숨기기</button>
+<div id="box2" style="background:#1e293b;
+padding:20px;border-radius:18px;margin-top:12px;">
 
 <h3>EV 분석</h3>
 추천: <b>{ev_data["추천"]}</b><br>
@@ -1117,12 +1099,22 @@ font-family:Arial;padding:30px;">
 <br><br>
 <button onclick="history.back()">← 뒤로</button>
 
+<script>
+function toggleBox(id){
+    var el = document.getElementById(id);
+    if(el.style.display==="none"){
+        el.style.display="block";
+    }else{
+        el.style.display="none";
+    }
+}
+</script>
+
 </body>
 </html>
 """
 
 # =====================================================
-# SecretCore PRO - Final Code
 # PART 8
 # 고급 분석 API 세트
 # =====================================================
@@ -1252,7 +1244,6 @@ def elite_picks(min_ev: float = 0.05,
     return sorted(result, key=lambda x: (x["confidence"], x["EV"]), reverse=True)
 
 # =====================================================
-# SecretCore PRO - Final Code
 # PART 9
 # 전략 성능 / ROI / 리스크 / 회차 분석 API
 # =====================================================
@@ -1413,7 +1404,6 @@ def round_roi():
     return sorted(report, key=lambda x: x["round"])
 
 # =====================================================
-# SecretCore PRO - Final Code
 # PART 10
 # 시스템 관리 / 안정화 / 성능 관리
 # =====================================================
