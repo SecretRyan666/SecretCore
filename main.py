@@ -47,6 +47,7 @@ FAVORITES = []
 
 DIST_CACHE = {}
 SECRET_CACHE = {}
+ODDS_DIST_CACHE = {}
 
 LEAGUE_COUNT = {}
 LEAGUE_WEIGHT = {}
@@ -55,6 +56,37 @@ FIVE_COND_DIST = {}
 MIN_CONFIDENCE = 0.32
 
 logging.basicConfig(level=logging.INFO)
+
+# =====================================================
+# 배당 분포 사전 캐시 생성
+# =====================================================
+
+def build_odds_cache(df):
+    global ODDS_DIST_CACHE
+    ODDS_DIST_CACHE.clear()
+
+    if df.empty:
+        return
+
+    grouped = df.groupby(
+        [df.columns[COL_WIN_ODDS],
+         df.columns[COL_DRAW_ODDS],
+         df.columns[COL_LOSE_ODDS],
+         df.columns[COL_RESULT]]
+    ).size().unstack(fill_value=0)
+
+    for key, row in grouped.iterrows():
+        total = row.sum()
+
+        ODDS_DIST_CACHE[key] = {
+            "총": int(total),
+            "승": int(row.get("승", 0)),
+            "무": int(row.get("무", 0)),
+            "패": int(row.get("패", 0)),
+            "wp": round(row.get("승", 0)/total*100,2) if total else 0,
+            "dp": round(row.get("무", 0)/total*100,2) if total else 0,
+            "lp": round(row.get("패", 0)/total*100,2) if total else 0
+        }
 
 # =====================================================
 # 데이터 로드
@@ -82,6 +114,7 @@ def load_data():
 
     build_five_cond_cache(CURRENT_DF)
     build_league_weight(CURRENT_DF)
+    build_odds_cache(CURRENT_DF)
 
 load_data()
 
@@ -379,13 +412,15 @@ def secret_pick_brain(row, df):
 
     w_exact = 1 - w5
 
-    exact_df = df[
-        (df.iloc[:, COL_WIN_ODDS]  == row.iloc[COL_WIN_ODDS]) &
-        (df.iloc[:, COL_DRAW_ODDS] == row.iloc[COL_DRAW_ODDS]) &
-        (df.iloc[:, COL_LOSE_ODDS] == row.iloc[COL_LOSE_ODDS])
-    ]
+    odds_key = (
+    row.iloc[COL_WIN_ODDS],
+    row.iloc[COL_DRAW_ODDS],
+    row.iloc[COL_LOSE_ODDS]
+)
 
-    exact_dist = distribution(exact_df)
+exact_dist = ODDS_DIST_CACHE.get(odds_key, {
+    "총":0,"wp":0,"dp":0,"lp":0
+})
 
     sp_w = w5*p5.get("wp",0) + w_exact*exact_dist.get("wp",0)
     sp_d = w5*p5.get("dp",0) + w_exact*exact_dist.get("dp",0)
@@ -492,6 +527,7 @@ def upload(file: UploadFile = File(...)):
 
     build_five_cond_cache(CURRENT_DF)
     build_league_weight(CURRENT_DF)
+    build_odds_cache(CURRENT_DF)
 
     return RedirectResponse("/", status_code=302)
 
