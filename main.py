@@ -980,8 +980,6 @@ def detail(
     away   = row.iloc[COL_AWAY]
     league = row.iloc[COL_LEAGUE]
 
-    # 🔥 반드시 4칸 들여쓰기
-
     five_cond_text = (
         f"{row.iloc[COL_TYPE]} · "
         f"{row.iloc[COL_HOMEAWAY]} · "
@@ -1001,19 +999,32 @@ def detail(
 
     filtered_df = apply_filters(CURRENT_DF, type, homeaway, general, dir, handi)
 
-    # 5조건 완전일치
+    # 카드1 - 5조건 완전일치
     base_cond = build_5cond(row)
     base_df = run_filter(filtered_df, base_cond)
     base_dist = distribution(base_df)
 
-    # 동일 리그 + 5조건
+    # 카드1 - 동일 리그 + 5조건
     league_cond = build_league_cond(row)
     league_df = run_filter(filtered_df, league_cond)
     league_dist = distribution(league_df)
 
-    # EV 분석
-    secret_data = safe_ev(base_dist, row)
+    # -----------------------------
+    # 카드2 - 리그 포함 + 5조건
+    # -----------------------------
+    league_keyword = str(row.iloc[COL_LEAGUE])
 
+    league_all_df = filtered_df[
+        filtered_df.iloc[:, COL_LEAGUE].str.contains(
+            league_keyword, na=False
+        )
+    ]
+
+    league_all_cond = build_5cond(row)
+    league_all_df = run_filter(league_all_df, league_all_cond)
+    league_all_dist = distribution(league_all_df)
+
+    secret_data = safe_ev(base_dist, row)
     condition_str = filter_text(type, homeaway, general, dir, handi)
 
     return f"""
@@ -1067,18 +1078,47 @@ font-family:Arial;padding:20px;">
 
 <br><br>
 
-<div style="background:#1e293b;padding:16px;border-radius:16px;">
-<h3>시크릿 EV 분석</h3>
-추천: <b>{secret_data["추천"]}</b><br>
-승 EV: {secret_data["EV"]["승"]}<br>
-무 EV: {secret_data["EV"]["무"]}<br>
-패 EV: {secret_data["EV"]["패"]}
+<button onclick="toggleBox('card2')" 
+style="margin-bottom:10px;">
+📊 카드2 보기/숨기기
+</button>
+
+<div id="card2" 
+style="background:#1e293b;
+padding:16px;border-radius:16px;
+min-width:280px;display:none;">
+
+<h3>리그포함 5조건 분포</h3>
+
+<div style="font-size:12px;opacity:0.7;margin-bottom:10px;">
+리그 포함: {league_keyword}
+</div>
+
+총 {league_all_dist["총"]}경기
+
+<div>승 {league_all_dist["wp"]}% ({league_all_dist["승"]}경기)</div>
+{bar_html(league_all_dist["wp"],"win")}
+
+<div>무 {league_all_dist["dp"]}% ({league_all_dist["무"]}경기)</div>
+{bar_html(league_all_dist["dp"],"draw")}
+
+<div>패 {league_all_dist["lp"]}% ({league_all_dist["패"]}경기)</div>
+{bar_html(league_all_dist["lp"],"lose")}
+
 </div>
 
 <br><br>
-<a href="/page3?no={no}">홈팀 분석</a><br>
-<a href="/page3?no={no}&away=1">원정팀 분석</a><br>
-<a href="/page4?no={no}">배당 분석</a>
+
+<script>
+function toggleBox(id){
+    var el = document.getElementById(id);
+    if(el.style.display==="none"){
+        el.style.display="block";
+    }else{
+        el.style.display="none";
+    }
+}
+</script>
 
 <br><br>
 <button onclick="history.back()">← 뒤로</button>
