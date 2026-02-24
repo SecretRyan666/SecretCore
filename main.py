@@ -783,7 +783,7 @@ let data = await r.json();
 let text="";
 if(data.length>0){
 let first=data[0].row;
-text = first[1] + "년 · " + first[2] + "회차";
+text = first[1] + "년 · " + first[2];
 }else{
 text="경기 없음";
 }
@@ -810,7 +810,15 @@ ${badge}
 <div>승 ${row[8]} | 무 ${row[9]} | 패 ${row[10]}</div>
 <div>${row[14]} · ${row[16]} · ${row[11]} · ${row[15]} · ${row[12]}</div>
 <div class="info-btn">
-<a href="/detail?no=${row[0]}" style="color:#38bdf8;">정보</a>
+let query = window.location.search;
+
+html+=`<div class="card">
+${badge}
+<div><b>${row[6]}</b> vs <b>${row[7]}</b></div>
+<div>승 ${row[8]} | 무 ${row[9]} | 패 ${row[10]}</div>
+<div>${row[14]} · ${row[16]} · ${row[11]} · ${row[15]} · ${row[12]}</div>
+<div class="info-btn">
+<a href="/detail?no=${row[0]}${query}" style="color:#38bdf8;">정보</a>
 </div>
 </div>`;
 });
@@ -876,6 +884,23 @@ def detail(
     away   = row.iloc[COL_AWAY]
     league = row.iloc[COL_LEAGUE]
 
+five_cond_text = (
+    f"{row.iloc[COL_TYPE]} · "
+    f"{row.iloc[COL_HOMEAWAY]} · "
+    f"{row.iloc[COL_GENERAL]} · "
+    f"{row.iloc[COL_DIR]} · "
+    f"{row.iloc[COL_HANDI]}"
+)
+
+league_cond_text = (
+    f"{row.iloc[COL_LEAGUE]} · "
+    f"{row.iloc[COL_TYPE]} · "
+    f"{row.iloc[COL_HOMEAWAY]} · "
+    f"{row.iloc[COL_GENERAL]} · "
+    f"{row.iloc[COL_DIR]} · "
+    f"{row.iloc[COL_HANDI]}"
+)
+
     filtered_df = apply_filters(CURRENT_DF, type, homeaway, general, dir, handi)
 
     # 5조건 완전일치
@@ -914,6 +939,9 @@ font-family:Arial;padding:20px;">
 
 <div style="flex:1;background:#1e293b;padding:16px;border-radius:16px;min-width:280px;">
 <h3>5조건 완전일치</h3>
+<div style="font-size:12px;opacity:0.7;margin-bottom:10px;">
+{five_cond_text}
+</div>
 총 {base_dist["총"]}경기
 <div>승 {base_dist["wp"]}% ({base_dist["승"]}경기)</div>
 {bar_html(base_dist["wp"],"win")}
@@ -925,6 +953,9 @@ font-family:Arial;padding:20px;">
 
 <div style="flex:1;background:#1e293b;padding:16px;border-radius:16px;min-width:280px;">
 <h3>동일리그 5조건</h3>
+<div style="font-size:12px;opacity:0.7;margin-bottom:10px;">
+{league_cond_text}
+</div>
 총 {league_dist["총"]}경기
 <div>승 {league_dist["wp"]}% ({league_dist["승"]}경기)</div>
 {bar_html(league_dist["wp"],"win")}
@@ -1415,6 +1446,135 @@ def round_roi():
         })
 
     return sorted(report, key=lambda x: x["round"])
+
+# =====================================================
+# Strategy 1 View
+# =====================================================
+
+@app.get("/strategy1-view", response_class=HTMLResponse)
+def strategy1_view():
+
+    return """
+    <html>
+    <body style="background:#0f1720;color:white;padding:30px;font-family:Arial;">
+    <h2>🧠 전략 1 분석 (High Confidence)</h2>
+    <div id="content"></div>
+
+    <script>
+    fetch("/high-confidence")
+    .then(res=>res.json())
+    .then(data=>{
+        let html="";
+        data.forEach(m=>{
+            html += `<div style="margin-bottom:12px;">
+            ${m.home} vs ${m.away} → ${m.추천} (${m.confidence})
+            </div>`;
+        });
+        document.getElementById("content").innerHTML=html;
+    });
+    </script>
+
+    <br><br>
+    <button onclick="history.back()">← 뒤로</button>
+    </body>
+    </html>
+    """
+
+# =====================================================
+# Strategy 2 View
+# =====================================================
+
+@app.get("/strategy2-view", response_class=HTMLResponse)
+def strategy2_view():
+
+    return """
+    <html>
+    <body style="background:#0f1720;color:white;padding:30px;font-family:Arial;">
+    <h2>🎯 전략 2 (Top EV)</h2>
+    <div id="content"></div>
+
+    <script>
+    fetch("/top-ev")
+    .then(res=>res.json())
+    .then(data=>{
+        let html="";
+        data.forEach(m=>{
+            html += `<div style="margin-bottom:12px;">
+            ${m.home} vs ${m.away} → ${m.추천} (EV ${m.EV})
+            </div>`;
+        });
+        document.getElementById("content").innerHTML=html;
+    });
+    </script>
+
+    <br><br>
+    <button onclick="history.back()">← 뒤로</button>
+    </body>
+    </html>
+    """
+
+# =====================================================
+# History View
+# =====================================================
+
+@app.get("/history", response_class=HTMLResponse)
+def history_view():
+
+    return """
+    <html>
+    <body style="background:#0f1720;color:white;padding:30px;font-family:Arial;">
+    <h2>📊 회차별 ROI</h2>
+    <div id="content"></div>
+
+    <script>
+    fetch("/round-roi")
+    .then(res=>res.json())
+    .then(data=>{
+        let html="";
+        data.forEach(r=>{
+            html += `<div>
+            ${r.round}회차 → ROI ${r.ROI} (${r.bets}경기)
+            </div>`;
+        });
+        document.getElementById("content").innerHTML=html;
+    });
+    </script>
+
+    <br><br>
+    <button onclick="history.back()">← 뒤로</button>
+    </body>
+    </html>
+    """
+
+# =====================================================
+# Evaluate View
+# =====================================================
+
+@app.get("/evaluate", response_class=HTMLResponse)
+def evaluate_view():
+
+    return """
+    <html>
+    <body style="background:#0f1720;color:white;padding:30px;font-family:Arial;">
+    <h2>🧪 전략 시뮬레이션</h2>
+    <div id="content"></div>
+
+    <script>
+    fetch("/strategy-sim")
+    .then(res=>res.json())
+    .then(data=>{
+        document.getElementById("content").innerHTML =
+        `베팅수: ${data.bets}<br>
+         총수익: ${data.total_profit}<br>
+         ROI: ${data.ROI}`;
+    });
+    </script>
+
+    <br><br>
+    <button onclick="history.back()">← 뒤로</button>
+    </body>
+    </html>
+    """
 
 # =====================================================
 # 시스템 상태 리포트
