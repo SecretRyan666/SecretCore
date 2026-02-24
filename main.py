@@ -1009,12 +1009,11 @@ def detail(
     league_df = run_filter(filtered_df, league_cond)
     league_dist = distribution(league_df)
 
-    # ---------------------------------------------
+# ---------------------------------------------
 # 카드2 - 5조건 리그별 분포
 # ---------------------------------------------
 
 league_group_df = run_filter(filtered_df, build_5cond(row))
-
 league_group_df = league_group_df[
     league_group_df.iloc[:, COL_RESULT] != "경기전"
 ]
@@ -1023,15 +1022,10 @@ league_groups = league_group_df.groupby(
     league_group_df.iloc[:, COL_LEAGUE]
 )
 
-league_dist_list = []
-
-for league_name, group in league_groups:
-    dist = distribution(group)
-    league_dist_list.append((league_name, dist))
-<html>
 card2_html = ""
 
-for lg, dist in league_dist_list:
+for lg, group in league_groups:
+    dist = distribution(group)
 
     card2_html += f"""
     <div style="background:#1e293b;
@@ -1058,6 +1052,10 @@ for lg, dist in league_dist_list:
     </div>
     """
 
+return f"""
+<html>
+<body style="background:#0f1720;color:white;font-family:Arial;padding:20px;">
+
 <h2>[{league}] {home} vs {away}</h2>
 
 <div style="opacity:0.7;font-size:12px;margin-bottom:15px;">
@@ -1071,70 +1069,18 @@ for lg, dist in league_dist_list:
 <br><br>
 
 <div style="display:flex;gap:20px;flex-wrap:wrap;">
-
-<div style="flex:1;background:#1e293b;padding:16px;border-radius:16px;min-width:280px;">
-<h3>5조건 완전일치</h3>
-<div style="font-size:12px;opacity:0.7;margin-bottom:10px;">
-{five_cond_text}
-</div>
-총 {base_dist["총"]}경기
-<div>승 {base_dist["wp"]}% ({base_dist["승"]}경기)</div>
-{bar_html(base_dist["wp"],"win")}
-<div>무 {base_dist["dp"]}% ({base_dist["무"]}경기)</div>
-{bar_html(base_dist["dp"],"draw")}
-<div>패 {base_dist["lp"]}% ({base_dist["패"]}경기)</div>
-{bar_html(base_dist["lp"],"lose")}
-</div>
-
-<div style="flex:1;background:#1e293b;padding:16px;border-radius:16px;min-width:280px;">
-<h3>동일리그 5조건</h3>
-<div style="font-size:12px;opacity:0.7;margin-bottom:10px;">
-{league_cond_text}
-</div>
-총 {league_dist["총"]}경기
-<div>승 {league_dist["wp"]}% ({league_dist["승"]}경기)</div>
-{bar_html(league_dist["wp"],"win")}
-<div>무 {league_dist["dp"]}% ({league_dist["무"]}경기)</div>
-{bar_html(league_dist["dp"],"draw")}
-<div>패 {league_dist["lp"]}% ({league_dist["패"]}경기)</div>
-{bar_html(league_dist["lp"],"lose")}
-</div>
-
+...
 </div>
 
 <br><br>
 
-<button onclick="toggleBox('card2')" 
-style="margin-bottom:10px;">
-📊 카드2 보기/숨기기
+<button onclick="toggleBox('card2')" style="margin-bottom:10px;">
+카드2 보기/숨기기
 </button>
 
-<div id="card2" 
-style="background:#1e293b;
-padding:16px;border-radius:16px;
-min-width:280px;display:none;">
+<div id="card2" style="display:none;">
 {card2_html}
-
-<h3>리그포함 5조건 분포</h3>
-
-<div style="font-size:12px;opacity:0.7;margin-bottom:10px;">
-리그 포함: {league_keyword}
 </div>
-
-총 {league_all_dist["총"]}경기
-
-<div>승 {league_all_dist["wp"]}% ({league_all_dist["승"]}경기)</div>
-{bar_html(league_all_dist["wp"],"win")}
-
-<div>무 {league_all_dist["dp"]}% ({league_all_dist["무"]}경기)</div>
-{bar_html(league_all_dist["dp"],"draw")}
-
-<div>패 {league_all_dist["lp"]}% ({league_all_dist["패"]}경기)</div>
-{bar_html(league_all_dist["lp"],"lose")}
-
-</div>
-
-<br><br>
 
 <script>
 function toggleBox(id){{
@@ -1149,6 +1095,7 @@ function toggleBox(id){{
 
 <br><br>
 <button onclick="history.back()">← 뒤로</button>
+
 </body>
 </html>
 """
