@@ -1009,28 +1009,54 @@ def detail(
     league_df = run_filter(filtered_df, league_cond)
     league_dist = distribution(league_df)
 
-    # -----------------------------
-    # 카드2 - 리그 포함 + 5조건
-    # -----------------------------
-    league_keyword = str(row.iloc[COL_LEAGUE])
+    # ---------------------------------------------
+# 카드2 - 5조건 리그별 분포
+# ---------------------------------------------
 
-    league_all_df = filtered_df[
-        filtered_df.iloc[:, COL_LEAGUE].str.contains(
-            league_keyword, na=False
-        )
-    ]
+league_group_df = run_filter(filtered_df, build_5cond(row))
 
-    league_all_cond = build_5cond(row)
-    league_all_df = run_filter(league_all_df, league_all_cond)
-    league_all_dist = distribution(league_all_df)
+league_group_df = league_group_df[
+    league_group_df.iloc[:, COL_RESULT] != "경기전"
+]
 
-    secret_data = safe_ev(base_dist, row)
-    condition_str = filter_text(type, homeaway, general, dir, handi)
+league_groups = league_group_df.groupby(
+    league_group_df.iloc[:, COL_LEAGUE]
+)
 
-    return f"""
+league_dist_list = []
+
+for league_name, group in league_groups:
+    dist = distribution(group)
+    league_dist_list.append((league_name, dist))
 <html>
-<body style="background:#0f1720;color:white;
-font-family:Arial;padding:20px;">
+card2_html = ""
+
+for lg, dist in league_dist_list:
+
+    card2_html += f"""
+    <div style="background:#1e293b;
+    padding:16px;border-radius:16px;
+    margin-bottom:16px;">
+
+    <h3>5조건 리그별 분포</h3>
+
+    <div style="font-size:12px;opacity:0.7;margin-bottom:10px;">
+    5조건 + {lg}
+    </div>
+
+    총 {dist["총"]}경기
+
+    <div>승 {dist["wp"]}% ({dist["승"]}경기)</div>
+    {bar_html(dist["wp"],"win")}
+
+    <div>무 {dist["dp"]}% ({dist["무"]}경기)</div>
+    {bar_html(dist["dp"],"draw")}
+
+    <div>패 {dist["lp"]}% ({dist["패"]}경기)</div>
+    {bar_html(dist["lp"],"lose")}
+
+    </div>
+    """
 
 <h2>[{league}] {home} vs {away}</h2>
 
@@ -1087,6 +1113,7 @@ style="margin-bottom:10px;">
 style="background:#1e293b;
 padding:16px;border-radius:16px;
 min-width:280px;display:none;">
+{card2_html}
 
 <h3>리그포함 5조건 분포</h3>
 
