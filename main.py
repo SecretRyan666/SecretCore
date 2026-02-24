@@ -49,14 +49,10 @@ MIN_CONFIDENCE = 0.32
 LEAGUE_COUNT = {}
 LEAGUE_WEIGHT = {}
 
-# =====================================================
-# 5조건 사전 분포 캐시
-# =====================================================
-
 FIVE_COND_DIST = {}
 
 # =====================================================
-# 데이터 로드 (dtype=str 고정)
+# 데이터 로드
 # =====================================================
 
 def load_data():
@@ -101,36 +97,27 @@ def build_league_cond(row):
     return cond
 
 # =====================================================
-# 필터 적용 함수 (다중선택 AND)
+# 필터
 # =====================================================
 
 def apply_filters(df, type, homeaway, general, dir, handi):
 
     if type:
         df = df[df.iloc[:, COL_TYPE].isin(type.split(","))]
-
     if homeaway:
         df = df[df.iloc[:, COL_HOMEAWAY].isin(homeaway.split(","))]
-
     if general:
         df = df[df.iloc[:, COL_GENERAL].isin(general.split(","))]
-
     if dir:
         df = df[df.iloc[:, COL_DIR].isin(dir.split(","))]
-
     if handi:
         df = df[df.iloc[:, COL_HANDI].isin(handi.split(","))]
 
     return df
 
-# =====================================================
-# 조건 텍스트 생성
-# =====================================================
-
 def filter_text(type, homeaway, general, dir, handi):
 
     parts = []
-
     if type: parts.append(f"유형={type}")
     if homeaway: parts.append(f"홈/원정={homeaway}")
     if general: parts.append(f"일반={general}")
@@ -138,10 +125,6 @@ def filter_text(type, homeaway, general, dir, handi):
     if handi: parts.append(f"핸디={handi}")
 
     return " · ".join(parts) if parts else "기본조건"
-
-# =====================================================
-# run_filter
-# =====================================================
 
 def run_filter(df, conditions: dict):
     filtered = df
@@ -152,7 +135,7 @@ def run_filter(df, conditions: dict):
     return filtered
 
 # =====================================================
-# 분포 (DIST_CACHE 적용)
+# 분포
 # =====================================================
 
 def distribution(df):
@@ -193,7 +176,7 @@ def distribution(df):
     return result
 
 # =====================================================
-# 5조건 사전 집계 생성
+# 5조건 캐시
 # =====================================================
 
 def build_five_cond_cache(df):
@@ -236,7 +219,7 @@ def build_five_cond_cache(df):
             FIVE_COND_DIST[key]["lp"] = 0
 
 # =====================================================
-# 리그 가중치 생성
+# 리그 가중치
 # =====================================================
 
 def build_league_weight(df):
@@ -263,7 +246,7 @@ def build_league_weight(df):
             LEAGUE_WEIGHT[league] = 0.90
 
 # =====================================================
-# 안전 EV
+# EV 계산
 # =====================================================
 
 def safe_ev(dist, row):
@@ -292,7 +275,7 @@ def safe_ev(dist, row):
     }
 
 # =====================================================
-# SECRET 점수 (조합 캐싱 적용)
+# SECRET
 # =====================================================
 
 def secret_score_fast(row, df):
@@ -388,6 +371,118 @@ def secret_pick_brain(row, df):
         "league_weight": league_weight
     }
 
+
+# =====================================================
+# Health Check
+# =====================================================
+
+def self_check():
+
+    report = {}
+
+    report["data_loaded"] = not CURRENT_DF.empty
+    report["rows"] = len(CURRENT_DF)
+
+    report["column_count_ok"] = (
+        CURRENT_DF.shape[1] == EXPECTED_COLS
+        if not CURRENT_DF.empty else False
+    )
+
+    try:
+        _ = CURRENT_DF.iloc[:, COL_NO]
+        _ = CURRENT_DF.iloc[:, COL_TYPE]
+        report["index_access_ok"] = True
+    except:
+        report["index_access_ok"] = False
+
+    report["dist_cache_size"] = len(DIST_CACHE)
+    report["secret_cache_size"] = len(SECRET_CACHE)
+    report["expected_cols"] = EXPECTED_COLS
+
+    return report
+
+
+@app.get("/health")
+def health():
+    return {
+        "self_check": self_check()
+    }
+
+
+# =====================================================
+# 필터 값 추출 API
+# =====================================================
+
+@app.get("/filters")
+def filters():
+
+    df = CURRENT_DF
+
+    if df.empty:
+        return {}
+
+    df = df[df.iloc[:, COL_RESULT] == "경기전"]
+
+    return {
+        "type": sorted(df.iloc[:, COL_TYPE].dropna().unique().tolist()),
+        "homeaway": sorted(df.iloc[:, COL_HOMEAWAY].dropna().unique().tolist()),
+        "general": sorted(df.iloc[:, COL_GENERAL].dropna().unique().tolist()),
+        "dir": sorted(df.iloc[:, COL_DIR].dropna().unique().tolist()),
+        "handi": sorted(df.iloc[:, COL_HANDI].dropna().unique().tolist())
+    }
+
+
+# =====================================================
+# 경기목록 API
+# =====================================================
+
+@app.get("/matches")
+def matches(
+    type: str = None,
+    homeaway: str = None,
+    general: str = None,
+    dir: str = None,
+    handi: str = None
+):
+
+    df = CURRENT_DF
+    if df.empty:
+        return []
+
+    base_df = df[
+        (df.iloc[:, COL_RESULT] == "경기전") &
+        (
+            (df.iloc[:, COL_TYPE] == "일반") |
+            (df.iloc[:, COL_TYPE] == "핸디1")
+        )
+    ]
+
+    base_df = apply_filters(base_df, type, homeaway, general, dir, handi)
+
+    result = []
+
+    for _, row in base_df.iterrows():
+
+        data = row.values.tolist()
+        sec = secret_score_fast(row, df)
+        brain = secret_pick_brain(row, df)
+
+        is_secret = bool(
+            sec["score"] > 0.05 and
+            sec["sample"] >= 20 and
+            sec["추천"] != "없음"
+        )
+
+        result.append({
+            "row": list(map(str, data)),
+            "secret": is_secret,
+            "pick": sec["추천"] if is_secret else "",
+            "sp_pick": brain["추천"],
+            "confidence": brain["confidence"]
+        })
+
+    return result
+
 # =====================================================
 # 로그인
 # =====================================================
@@ -435,7 +530,7 @@ def page_upload():
 
 
 # =====================================================
-# 업로드 처리 (dtype=str 유지 + 캐시초기화)
+# 업로드 처리
 # =====================================================
 
 @app.post("/upload-data")
@@ -466,70 +561,6 @@ def upload(file: UploadFile = File(...)):
     build_league_weight(CURRENT_DF)
 
     return RedirectResponse("/", status_code=302)
-
-
-# =====================================================
-# self_check
-# =====================================================
-
-def self_check():
-
-    report = {}
-
-    report["data_loaded"] = not CURRENT_DF.empty
-    report["rows"] = len(CURRENT_DF)
-
-    report["column_count_ok"] = (
-        CURRENT_DF.shape[1] == EXPECTED_COLS
-        if not CURRENT_DF.empty else False
-    )
-
-    try:
-        _ = CURRENT_DF.iloc[:, COL_NO]
-        _ = CURRENT_DF.iloc[:, COL_TYPE]
-        report["index_access_ok"] = True
-    except:
-        report["index_access_ok"] = False
-
-    report["dist_cache_size"] = len(DIST_CACHE)
-    report["secret_cache_size"] = len(SECRET_CACHE)
-    report["expected_cols"] = EXPECTED_COLS
-
-    return report
-
-
-# =====================================================
-# Health Check
-# =====================================================
-
-@app.get("/health")
-def health():
-    return {
-        "self_check": self_check()
-    }
-
-
-# =====================================================
-# 필터 값 추출 API (Page1 모달용)
-# =====================================================
-
-@app.get("/filters")
-def filters():
-
-    df = CURRENT_DF
-
-    if df.empty:
-        return {}
-
-    df = df[df.iloc[:, COL_RESULT] == "경기전"]
-
-    return {
-        "type": sorted(df.iloc[:, COL_TYPE].dropna().unique().tolist()),
-        "homeaway": sorted(df.iloc[:, COL_HOMEAWAY].dropna().unique().tolist()),
-        "general": sorted(df.iloc[:, COL_GENERAL].dropna().unique().tolist()),
-        "dir": sorted(df.iloc[:, COL_DIR].dropna().unique().tolist()),
-        "handi": sorted(df.iloc[:, COL_HANDI].dropna().unique().tolist())
-    }
 
 
 # =====================================================
@@ -573,8 +604,6 @@ border-radius:18px;position:relative;
 box-shadow:0 4px 12px rgba(0,0,0,0.3);
 }
 .info-btn{position:absolute;right:14px;top:12px;font-size:12px;}
-.star-btn{position:absolute;right:14px;top:40px;font-size:18px;color:#6b7280;}
-.star-active{color:#facc15;}
 .bottom-nav{
 position:fixed;bottom:0;width:100%;
 background:#111827;display:flex;
@@ -723,142 +752,6 @@ load();
 </html>
 """
 
-
-# =====================================================
-# 경기목록 API
-# =====================================================
-
-@app.get("/matches")
-def matches(
-    type: str = None,
-    homeaway: str = None,
-    general: str = None,
-    dir: str = None,
-    handi: str = None
-):
-
-    df = CURRENT_DF
-    if df.empty:
-        return []
-
-    base_df = df[
-        (df.iloc[:, COL_RESULT] == "경기전") &
-        (
-            (df.iloc[:, COL_TYPE] == "일반") |
-            (df.iloc[:, COL_TYPE] == "핸디1")
-        )
-    ]
-
-    base_df = apply_filters(base_df, type, homeaway, general, dir, handi)
-
-    result = []
-
-    for _, row in base_df.iterrows():
-
-        data = row.values.tolist()
-        sec = secret_score_fast(row, df)
-        brain = secret_pick_brain(row, df)
-
-        is_secret = bool(
-            sec["score"] > 0.05 and
-            sec["sample"] >= 20 and
-            sec["추천"] != "없음"
-        )
-
-        result.append({
-            "row": list(map(str, data)),
-            "secret": is_secret,
-            "pick": sec["추천"] if is_secret else "",
-            "sp_pick": brain["추천"],
-            "confidence": brain["confidence"]
-        })
-
-    return result
-
-# =====================================================
-# 즐겨찾기 토글
-# =====================================================
-
-@app.post("/fav-toggle")
-def fav_toggle(home: str = Form(...), away: str = Form(...)):
-
-    global FAVORITES
-
-    key = f"{home}__{away}"
-
-    if key in FAVORITES:
-        FAVORITES.remove(key)
-        return {"status": "removed"}
-    else:
-        FAVORITES.append(key)
-        return {"status": "added"}
-
-
-# =====================================================
-# Ledger
-# =====================================================
-
-@app.get("/ledger", response_class=HTMLResponse)
-def ledger_page():
-    return """
-<html><body style='background:#0f1720;color:white;padding:30px;'>
-<h2>📊 Ledger</h2>
-<p>준비중입니다.</p>
-<button onclick="history.back()">← 뒤로</button>
-</body></html>
-"""
-
-
-# =====================================================
-# Memo
-# =====================================================
-
-@app.get("/memo", response_class=HTMLResponse)
-def memo_page():
-    return """
-<html><body style='background:#0f1720;color:white;padding:30px;'>
-<h2>📝 Memo</h2>
-<p>준비중입니다.</p>
-<button onclick="history.back()">← 뒤로</button>
-</body></html>
-"""
-
-
-# =====================================================
-# Capture
-# =====================================================
-
-@app.get("/capture", response_class=HTMLResponse)
-def capture_page():
-    return """
-<html><body style='background:#0f1720;color:white;padding:30px;'>
-<h2>📸 Capture</h2>
-<p>준비중입니다.</p>
-<button onclick="history.back()">← 뒤로</button>
-</body></html>
-"""
-
-
-# =====================================================
-# Favorites
-# =====================================================
-
-@app.get("/favorites", response_class=HTMLResponse)
-def favorites_page():
-
-    global FAVORITES
-
-    items = "<br>".join(FAVORITES) if FAVORITES else "없음"
-
-    return f"""
-<html><body style='background:#0f1720;color:white;padding:30px;'>
-<h2>⭐ Favorites</h2>
-<p>{items}</p>
-<button onclick="history.back()">← 뒤로</button>
-</body></html>
-"""
-
-
 # =====================================================
 # PRO 막대그래프
 # =====================================================
@@ -990,6 +883,60 @@ font-family:Arial;padding:20px;">
 </body>
 </html>
 """
+
+
+# =====================================================
+# 기타 페이지 (Stub)
+# =====================================================
+
+@app.get("/ledger", response_class=HTMLResponse)
+def ledger_page():
+    return """
+<html><body style='background:#0f1720;color:white;padding:30px;'>
+<h2>📊 Ledger</h2>
+<p>준비중입니다.</p>
+<button onclick="history.back()">← 뒤로</button>
+</body></html>
+"""
+
+
+@app.get("/memo", response_class=HTMLResponse)
+def memo_page():
+    return """
+<html><body style='background:#0f1720;color:white;padding:30px;'>
+<h2>📝 Memo</h2>
+<p>준비중입니다.</p>
+<button onclick="history.back()">← 뒤로</button>
+</body></html>
+"""
+
+
+@app.get("/capture", response_class=HTMLResponse)
+def capture_page():
+    return """
+<html><body style='background:#0f1720;color:white;padding:30px;'>
+<h2>📸 Capture</h2>
+<p>준비중입니다.</p>
+<button onclick="history.back()">← 뒤로</button>
+</body></html>
+"""
+
+
+@app.get("/favorites", response_class=HTMLResponse)
+def favorites_page():
+
+    global FAVORITES
+
+    items = "<br>".join(FAVORITES) if FAVORITES else "없음"
+
+    return f"""
+<html><body style='background:#0f1720;color:white;padding:30px;'>
+<h2>⭐ Favorites</h2>
+<p>{items}</p>
+<button onclick="history.back()">← 뒤로</button>
+</body></html>
+"""
+
 
 # =====================================================
 # 실행부
