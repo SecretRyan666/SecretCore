@@ -1108,14 +1108,31 @@ def page3_view(no: str = None, away: int = 0):
     team_name = row.iloc[COL_AWAY] if away else row.iloc[COL_HOME]
     league = row.iloc[COL_LEAGUE]
 
-    team_df = CURRENT_DF[
-        (CURRENT_DF.iloc[:, COL_HOME] == team_name) |
-        (CURRENT_DF.iloc[:, COL_AWAY] == team_name)
+    # 전체 경기 (홈+원정)
+    team_all_df = CURRENT_DF[
+        (
+            (CURRENT_DF.iloc[:, COL_HOME] == team_name) |
+            (CURRENT_DF.iloc[:, COL_AWAY] == team_name)
+        ) &
+        (CURRENT_DF.iloc[:, COL_RESULT] != "경기전")
     ]
 
-    team_df = team_df[team_df.iloc[:, COL_RESULT] != "경기전"]
+    # 홈/원정 분리
+    if away:
+        team_side_df = CURRENT_DF[
+            (CURRENT_DF.iloc[:, COL_AWAY] == team_name) &
+            (CURRENT_DF.iloc[:, COL_RESULT] != "경기전")
+        ]
+        side_label = "원정 경기"
+    else:
+        team_side_df = CURRENT_DF[
+            (CURRENT_DF.iloc[:, COL_HOME] == team_name) &
+            (CURRENT_DF.iloc[:, COL_RESULT] != "경기전")
+        ]
+        side_label = "홈 경기"
 
-    dist = distribution(team_df)
+    dist_all = distribution(team_all_df)
+    dist_side = distribution(team_side_df)
 
     html = f"""
 <html>
@@ -1127,38 +1144,46 @@ font-family:Arial;padding:30px;">
 리그: {league}
 </div>
 
-<button onclick="toggleBox('box1')" 
-style="margin-bottom:12px;">📊 분포 보기/숨기기</button>
+<div style="display:flex;gap:20px;flex-wrap:wrap;">
 
-<div id="box1" style="background:#1e293b;
-padding:20px;border-radius:18px;display:block;">
+<div style="flex:1;background:#1e293b;padding:20px;border-radius:18px;min-width:280px;">
 
-<h3>전체 분포 ({dist["총"]}경기)</h3>
+<h3>전체 분포 ({dist_all["총"]}경기)</h3>
 
-<div>승 {dist["wp"]}% ({dist["승"]}경기)</div>
-{bar_html(dist["wp"],"win")}
+<div style="font-size:12px;opacity:0.7;margin-bottom:12px;">
+조건: 팀={team_name} · 홈+원정 전체 · 완료경기
+</div>
 
-<div>무 {dist["dp"]}% ({dist["무"]}경기)</div>
-{bar_html(dist["dp"],"draw")}
+<div>승 {dist_all["wp"]}% ({dist_all["승"]}경기)</div>
+{bar_html(dist_all["wp"],"win")}
+<div>무 {dist_all["dp"]}% ({dist_all["무"]}경기)</div>
+{bar_html(dist_all["dp"],"draw")}
+<div>패 {dist_all["lp"]}% ({dist_all["패"]}경기)</div>
+{bar_html(dist_all["lp"],"lose")}
 
-<div>패 {dist["lp"]}% ({dist["패"]}경기)</div>
-{bar_html(dist["lp"],"lose")}
+</div>
+
+<div style="flex:1;background:#1e293b;padding:20px;border-radius:18px;min-width:280px;">
+
+<h3>{side_label} 분포 ({dist_side["총"]}경기)</h3>
+
+<div style="font-size:12px;opacity:0.7;margin-bottom:12px;">
+조건: 팀={team_name} · {side_label} · 완료경기
+</div>
+
+<div>승 {dist_side["wp"]}% ({dist_side["승"]}경기)</div>
+{bar_html(dist_side["wp"],"win")}
+<div>무 {dist_side["dp"]}% ({dist_side["무"]}경기)</div>
+{bar_html(dist_side["dp"],"draw")}
+<div>패 {dist_side["lp"]}% ({dist_side["패"]}경기)</div>
+{bar_html(dist_side["lp"],"lose")}
+
+</div>
 
 </div>
 
 <br><br>
 <button onclick="history.back()">← 뒤로</button>
-
-<script>
-function toggleBox(id) {{
-    var el = document.getElementById(id);
-    if(el.style.display==="none") {{
-        el.style.display="block";
-    }} else {{
-        el.style.display="none";
-    }}
-}}
-</script>
 
 </body>
 </html>
