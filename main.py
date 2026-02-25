@@ -991,8 +991,10 @@ def detail(
 
     base_list_df = base_df[
         base_df.iloc[:, COL_RESULT] != "경기전"
-    ].sort_values(
-        by=base_df.columns[COL_NO],
+    ].assign(
+        __no_numeric=pd.to_numeric(base_df.iloc[:, COL_NO], errors="coerce")
+    ).sort_values(
+        by="__no_numeric",
         ascending=False
     ).head(20)
 
@@ -1005,17 +1007,23 @@ def detail(
 
     league_list_df = league_df[
         league_df.iloc[:, COL_RESULT] != "경기전"
-    ].sort_values(
-        by=league_df.columns[COL_NO],
+    ].assign(
+        __no_numeric=pd.to_numeric(league_df.iloc[:, COL_NO], errors="coerce")
+    ).sort_values(
+        by="__no_numeric",
         ascending=False
     ).head(20)
 
+    # -----------------------------
+    # 경기목록 HTML 생성 함수
+    # -----------------------------
     def match_list_html(df):
         html = ""
         for _, r in df.iterrows():
             html += f"""
             <div style="font-size:12px;border-bottom:1px solid #334155;padding:6px 0;">
-            {r.iloc[COL_YEAR]} / {r.iloc[COL_ROUND]} /
+            {r.iloc[COL_YEAR]} /
+            {r.iloc[COL_ROUND]} /
             {r.iloc[COL_LEAGUE]} /
             {r.iloc[COL_HOME]} vs {r.iloc[COL_AWAY]} /
             {r.iloc[COL_HOMEAWAY]} /
@@ -1032,7 +1040,8 @@ def detail(
 
     base_list_html = match_list_html(base_list_df)
     league_list_html = match_list_html(league_list_df)
-# 카드 상단 조건 텍스트 복구
+
+    # 카드 상단 조건 텍스트
     five_cond_text = (
         f"{row.iloc[COL_TYPE]} · "
         f"{row.iloc[COL_HOMEAWAY]} · "
@@ -1069,8 +1078,10 @@ def detail(
 
         dist = distribution(group)
 
-        list_df = group.sort_values(
-            by=group.columns[COL_NO],
+        list_df = group.assign(
+            __no_numeric=pd.to_numeric(group.iloc[:, COL_NO], errors="coerce")
+        ).sort_values(
+            by="__no_numeric",
             ascending=False
         ).head(20)
 
@@ -1179,8 +1190,7 @@ def detail(
 
 <br><br>
 
-<button onclick="toggleBox('card2_main')" 
-style="margin-bottom:10px;">
+<button onclick="toggleBox('card2_main')" style="margin-bottom:10px;">
 5조건 리그별 분포 보기/숨기기
 </button>
 
