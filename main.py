@@ -1119,6 +1119,9 @@ def detail(
 <!-- 카드1 -->
 <div style="flex:1;background:#1e293b;padding:16px;border-radius:16px;min-width:280px;">
 <h3>5조건 완전일치</h3>
+<div style="font-size:12px;opacity:0.7;margin-bottom:10px;">
+{five_cond_text}
+</div>
 총 {base_dist["총"]}경기
 <div>승 {base_dist["wp"]}%</div>
 {bar_html(base_dist["wp"],"win")}
@@ -1137,6 +1140,9 @@ def detail(
 <!-- 카드2 동일리그 -->
 <div style="flex:1;background:#1e293b;padding:16px;border-radius:16px;min-width:280px;">
 <h3>동일리그 5조건</h3>
+<div style="font-size:12px;opacity:0.7;margin-bottom:10px;">
+{league_cond_text}
+</div>
 총 {league_dist["총"]}경기
 <div>승 {league_dist["wp"]}%</div>
 {bar_html(league_dist["wp"],"win")}
