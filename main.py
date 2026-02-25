@@ -1032,6 +1032,23 @@ def detail(
 
     base_list_html = match_list_html(base_list_df)
     league_list_html = match_list_html(league_list_df)
+# 카드 상단 조건 텍스트 복구
+    five_cond_text = (
+        f"{row.iloc[COL_TYPE]} · "
+        f"{row.iloc[COL_HOMEAWAY]} · "
+        f"{row.iloc[COL_GENERAL]} · "
+        f"{row.iloc[COL_DIR]} · "
+        f"{row.iloc[COL_HANDI]}"
+    )
+
+    league_cond_text = (
+        f"{row.iloc[COL_LEAGUE]} · "
+        f"{row.iloc[COL_TYPE]} · "
+        f"{row.iloc[COL_HOMEAWAY]} · "
+        f"{row.iloc[COL_GENERAL]} · "
+        f"{row.iloc[COL_DIR]} · "
+        f"{row.iloc[COL_HANDI]}"
+    )
 
     # =====================================================
     # 카드2 - 5조건 리그별 분포 + 경기목록
