@@ -1179,8 +1179,14 @@ def detail(
 
 <br><br>
 
-<h3>5조건 리그별 분포</h3>
+<button onclick="toggleBox('card2_main')" 
+style="margin-bottom:10px;">
+5조건 리그별 분포 보기/숨기기
+</button>
+
+<div id="card2_main" style="display:none;">
 {card2_html}
+</div>
 
 <script>
 function toggleBox(id){{
