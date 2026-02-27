@@ -1000,7 +1000,7 @@ def detail(
 
     def match_list_html(df, cond_text):
 
-    html = f"""
+    html = """
     <div style="font-size:11px;opacity:0.6;margin-bottom:8px;">
     조건: {cond_text}
     </div>
@@ -1008,7 +1008,7 @@ def detail(
 
     for _, r in df.iterrows():
 
-        html += f"""
+        html += """
         <div style="
             padding:8px 4px;
             border-bottom:1px solid #334155;
