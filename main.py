@@ -1198,6 +1198,23 @@ def detail(
 
 <div style="display:flex;gap:20px;flex-wrap:wrap;">
 
+</div>
+
+    <script>
+    function toggleBox(id){
+        var el = document.getElementById(id);
+        if(el.style.display==="none"){ el.style.display="block"; }
+        else{ el.style.display="none"; }
+    }
+    </script>
+
+    <br><br>
+    <button onclick="history.back()">← 뒤로</button>
+
+    </body>
+    </html>
+    """
+
 # =====================================================
 # Page3 - 팀 분석
 # =====================================================
