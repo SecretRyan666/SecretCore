@@ -995,24 +995,109 @@ def detail(
         ).head(20)
 
     def match_list_html(df):
-        html = ""
-        for _, r in df.iterrows():
-            html += f"""
-            <div style="font-size:12px;border-bottom:1px solid #334155;padding:6px 0;">
-            {r.iloc[COL_YEAR]} / {r.iloc[COL_ROUND]} /
-            {r.iloc[COL_LEAGUE]} /
-            {r.iloc[COL_HOME]} vs {r.iloc[COL_AWAY]} /
-            {r.iloc[COL_HOMEAWAY]} /
-            {r.iloc[COL_GENERAL]} /
-            {r.iloc[COL_DIR]} /
-            {r.iloc[COL_HANDI]} /
-            승 {r.iloc[COL_WIN_ODDS]} |
-            무 {r.iloc[COL_DRAW_ODDS]} |
-            패 {r.iloc[COL_LOSE_ODDS]} /
-            결과 {r.iloc[COL_RESULT]}
+
+    html = ""
+
+    for _, r in df.iterrows():
+
+        result = r.iloc[COL_RESULT]
+        homeaway = r.iloc[COL_HOMEAWAY]
+
+        # =========================
+        # 결과 뱃지 색상
+        # =========================
+        if result == "승":
+            badge_color = "#2563eb"   # 파랑
+        elif result == "무":
+            badge_color = "#16a34a"   # 초록
+        elif result == "패":
+            badge_color = "#dc2626"   # 빨강
+        else:
+            badge_color = "#64748b"
+
+        # =========================
+        # 홈/원정 강조 색상
+        # =========================
+        home_color = "#3b82f6"   # 홈 기본 파랑
+        away_color = "#ef4444"   # 원정 기본 빨강
+
+        # 현재 경기 기준 강조
+        if homeaway == "홈":
+            home_weight = "700"
+            away_weight = "500"
+        else:
+            home_weight = "500"
+            away_weight = "700"
+
+        html += f"""
+        <div style="
+            display:flex;
+            align-items:center;
+            justify-content:space-between;
+            padding:10px 0;
+            border-bottom:1px solid #1e293b;
+            font-size:13px;
+        ">
+
+            <!-- 좌측: 년도 / 회차 / 리그 -->
+            <div style="width:140px;opacity:0.8;">
+                {r.iloc[COL_YEAR]}/{r.iloc[COL_ROUND]}<br>
+                {r.iloc[COL_LEAGUE]}
             </div>
-            """
-        return html if html else "<div style='font-size:12px;'>경기 없음</div>"
+
+            <!-- 결과 뱃지 -->
+            <div style="
+                width:34px;height:34px;
+                border-radius:50%;
+                background:{badge_color};
+                display:flex;
+                align-items:center;
+                justify-content:center;
+                font-weight:bold;
+                color:white;
+                font-size:14px;
+            ">
+                {result}
+            </div>
+
+            <!-- 홈팀 -->
+            <div style="
+                flex:1;
+                text-align:right;
+                padding-right:10px;
+                font-weight:{home_weight};
+                color:{home_color};
+            ">
+                {r.iloc[COL_HOME]}
+            </div>
+
+            <!-- 배당 -->
+            <div style="
+                width:160px;
+                text-align:center;
+                font-size:12px;
+                opacity:0.9;
+            ">
+                {r.iloc[COL_WIN_ODDS]} |
+                {r.iloc[COL_DRAW_ODDS]} |
+                {r.iloc[COL_LOSE_ODDS]}
+            </div>
+
+            <!-- 원정팀 -->
+            <div style="
+                flex:1;
+                text-align:left;
+                padding-left:10px;
+                font-weight:{away_weight};
+                color:{away_color};
+            ">
+                {r.iloc[COL_AWAY]}
+            </div>
+
+        </div>
+        """
+
+    return html if html else "<div style='font-size:12px;'>경기 없음</div>"
 
     # =====================================================
     # 0️⃣ 맞대결 카드
