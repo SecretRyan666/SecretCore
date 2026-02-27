@@ -1028,6 +1028,13 @@ def detail(
         return "<h2>경기 없음</h2>"
 
     row = row_df.iloc[0]
+    condition_str = (
+        f"{row.iloc[COL_TYPE]} · "
+        f"{row.iloc[COL_HOMEAWAY]} · "
+        f"{row.iloc[COL_GENERAL]} · "
+        f"{row.iloc[COL_DIR]} · "
+        f"{row.iloc[COL_HANDI]}"
+)
 
     home   = row.iloc[COL_HOME]
     away   = row.iloc[COL_AWAY]
@@ -1202,7 +1209,7 @@ def detail(
 </div>
 
 <div style="opacity:0.7;font-size:12px;margin-bottom:15px;">
-현재 필터: {condition_str}<br>
+{condition_str}<br>
 배당: {odds_text}
 </div>
 
