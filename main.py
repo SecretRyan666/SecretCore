@@ -1003,12 +1003,11 @@ border-radius:999px;"></div>
 """
 
 # =====================================================
-# Page2 - 상세 분석 (ULTRA MASTER SAFE VERSION)
+# Page2 - 상세 분석 (ULTRA MASTER COMPLETE VERSION)
 # =====================================================
 
 @app.get("/detail", response_class=HTMLResponse)
 def detail(
-    request: Request,
     no: str = None,
     type: str = None,
     homeaway: str = None,
@@ -1028,13 +1027,15 @@ def detail(
         return "<h2>경기 없음</h2>"
 
     row = row_df.iloc[0]
+
+    # 🔥 Page1 카드와 동일 조건 출력
     condition_str = (
         f"{row.iloc[COL_TYPE]} · "
         f"{row.iloc[COL_HOMEAWAY]} · "
         f"{row.iloc[COL_GENERAL]} · "
         f"{row.iloc[COL_DIR]} · "
         f"{row.iloc[COL_HANDI]}"
-)
+    )
 
     home   = row.iloc[COL_HOME]
     away   = row.iloc[COL_AWAY]
@@ -1043,26 +1044,6 @@ def detail(
     odds_text = f"승 {row.iloc[COL_WIN_ODDS]} · 무 {row.iloc[COL_DRAW_ODDS]} · 패 {row.iloc[COL_LOSE_ODDS]}"
 
     filtered_df = apply_filters(CURRENT_DF, type, homeaway, general, dir, handi)
-
-    # =====================================================
-    # 🔥 Page1 조건값 그대로 표시 (재계산 제거)
-    # =====================================================
-
-    query_string = request.url.query
-
-    if query_string:
-        readable = (
-            query_string
-            .replace("type=", "유형=")
-            .replace("homeaway=", "홈/원정=")
-            .replace("general=", "일반=")
-            .replace("dir=", "정역=")
-            .replace("handi=", "핸디=")
-            .replace("&", " · ")
-        )
-        condition_str = readable
-    else:
-        condition_str = "기본조건"
 
     # =====================================================
     # 결과 동그라미
@@ -1169,7 +1150,6 @@ def detail(
 
         dist = distribution(group)
         list_html = match_list_html(group)
-
         box_id = f"card2_{lg}"
 
         card2_html += f"""
@@ -1191,10 +1171,6 @@ def detail(
         </div>
         """
 
-    # =====================================================
-    # HTML 출력
-    # =====================================================
-
     return f"""
 <html>
 <body style="background:#0f1720;color:white;font-family:Arial;padding:20px;">
@@ -1213,7 +1189,56 @@ def detail(
 배당: {odds_text}
 </div>
 
-<!-- 이하 기존 ULTRA MASTER 구조 동일 유지 -->
+<div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:20px;">
+
+<div style="flex:1;background:#1e293b;padding:16px;border-radius:16px;min-width:280px;">
+<h3>맞대결 기록 ({h2h_dist["총"]}경기)</h3>
+<div>승 {h2h_dist["wp"]}% ({h2h_dist["승"]}경기)</div>
+{bar_html(h2h_dist["wp"],"win")}
+<div>무 {h2h_dist["dp"]}% ({h2h_dist["무"]}경기)</div>
+{bar_html(h2h_dist["dp"],"draw")}
+<div>패 {h2h_dist["lp"]}% ({h2h_dist["패"]}경기)</div>
+{bar_html(h2h_dist["lp"],"lose")}
+<br>
+<button onclick="toggleBox('h1')">경기목록 보기/숨기기</button>
+<div id="h1" style="display:none;margin-top:10px;">
+{h2h_list_html}
+</div>
+</div>
+
+<div style="flex:1;background:#1e293b;padding:16px;border-radius:16px;min-width:280px;">
+<h3>맞대결 기록 홈원정 반전 ({h2h_reverse_dist["총"]}경기)</h3>
+<div>승 {h2h_reverse_dist["wp"]}% ({h2h_reverse_dist["승"]}경기)</div>
+{bar_html(h2h_reverse_dist["wp"],"win")}
+<div>무 {h2h_reverse_dist["dp"]}% ({h2h_reverse_dist["무"]}경기)</div>
+{bar_html(h2h_reverse_dist["dp"],"draw")}
+<div>패 {h2h_reverse_dist["lp"]}% ({h2h_reverse_dist["패"]}경기)</div>
+{bar_html(h2h_reverse_dist["lp"],"lose")}
+<br>
+<button onclick="toggleBox('h2')">경기목록 보기/숨기기</button>
+<div id="h2" style="display:none;margin-top:10px;">
+{h2h_reverse_list_html}
+</div>
+</div>
+
+</div>
+
+<br><br>
+<button onclick="history.back()">← 뒤로</button>
+
+<script>
+function toggleBox(id){
+    var el = document.getElementById(id);
+    if(el.style.display==="none"){
+        el.style.display="block";
+    }else{
+        el.style.display="none";
+    }
+}
+</script>
+
+</body>
+</html>
 """
 
 # =====================================================
