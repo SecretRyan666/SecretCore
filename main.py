@@ -1000,44 +1000,50 @@ def detail(
 
     def match_list_html(df, cond_text):
 
-        html = f"""
-        <div style="font-size:11px;opacity:0.6;margin-bottom:8px;">
-        조건: {cond_text}
+    html = f"""
+    <div style="font-size:11px;opacity:0.6;margin-bottom:8px;">
+    조건: {cond_text}
+    </div>
+    """
+
+    for _, r in df.iterrows():
+
+        html += f"""
+        <div style="
+            padding:8px 4px;
+            border-bottom:1px solid #334155;
+            font-size:13px;
+            display:flex;
+            flex-wrap:wrap;
+            justify-content:space-between;
+            align-items:center;
+            gap:6px;
+        ">
+
+            <div style="flex:1;min-width:220px;">
+                {r.iloc[COL_YEAR]}/{r.iloc[COL_ROUND]} ·
+                {r.iloc[COL_LEAGUE]} ·
+                {r.iloc[COL_HOME]} vs {r.iloc[COL_AWAY]}
+            </div>
+
+            <div style="white-space:nowrap;">
+                {r.iloc[COL_WIN_ODDS]} |
+                {r.iloc[COL_DRAW_ODDS]} |
+                {r.iloc[COL_LOSE_ODDS]}
+            </div>
+
+            <div style="
+                font-weight:bold;
+                min-width:45px;
+                text-align:right;
+            ">
+                {r.iloc[COL_RESULT]}
+            </div>
+
         </div>
         """
 
-        for _, r in df.iterrows():
-
-            html += f"""
-            <div style="
-                padding:10px 6px;
-                border-bottom:1px solid #334155;
-                font-size:13px;
-            ">
-
-                <div style="opacity:0.7;font-size:12px;margin-bottom:4px;">
-                    {r.iloc[COL_YEAR]}/{r.iloc[COL_ROUND]} · {r.iloc[COL_LEAGUE]}
-                </div>
-
-                <div style="font-weight:bold;margin-bottom:4px;">
-                    {r.iloc[COL_HOME]} vs {r.iloc[COL_AWAY]}
-                </div>
-
-                <div style="display:flex;justify-content:space-between;font-size:12px;">
-                    <div>
-                        {r.iloc[COL_WIN_ODDS]} |
-                        {r.iloc[COL_DRAW_ODDS]} |
-                        {r.iloc[COL_LOSE_ODDS]}
-                    </div>
-                    <div style="font-weight:bold;">
-                        {r.iloc[COL_RESULT]}
-                    </div>
-                </div>
-
-            </div>
-            """
-
-        return html if len(df) > 0 else "<div style='font-size:12px;'>경기 없음</div>"
+    return html if len(df) > 0 else "<div style='font-size:12px;'>경기 없음</div>"
 
     # =====================================================
     # 맞대결 (현재 기준)
