@@ -826,6 +826,17 @@ padding:8px 12px;border-radius:14px;
 font-size:12px;font-weight:bold;
 box-shadow:0 4px 10px rgba(0,0,0,0.4);
 }
+.result-badge{
+width:28px;
+height:28px;
+border-radius:50%;
+display:flex;
+align-items:center;
+justify-content:center;
+font-size:12px;
+font-weight:bold;
+color:white;
+}
 </style>
 </head>
 
@@ -856,27 +867,9 @@ opacity:0.8;border-bottom:1px solid #1e293b;">
 <a href="/evaluate">🧪</a>
 </div>
 
-<div class="modal" id="filterModal">
-<div class="modal-content">
-<h3>필터</h3>
-<div id="filterArea"></div>
-<button onclick="applyFilters()">적용</button>
-<button onclick="closeModal()">닫기</button>
-</div>
-</div>
-
 <script>
 
 function resetFilters(){ window.location.href="/"; }
-
-function openModal(){
-document.getElementById("filterModal").style.display="flex";
-loadFilters();
-}
-
-function closeModal(){
-document.getElementById("filterModal").style.display="none";
-}
 
 async function load(){
 
@@ -884,7 +877,6 @@ async function load(){
     let r = await fetch('/matches?' + params.toString());
     let data = await r.json();
 
-    // 🔥 여기서 conditionBar 처리
     if(data.length>0){
         let first=data[0].row;
         document.getElementById("conditionBar").innerText =
@@ -900,6 +892,18 @@ async function load(){
 
         let row=m.row;
         let badge="";
+        let resultColor="#334155";
+
+        // 홈 기준 색상
+        if(row[13]==="승") resultColor="#2563eb";
+        if(row[13]==="무") resultColor="#22c55e";
+        if(row[13]==="패") resultColor="#dc2626";
+
+        // 원정이면 승/패 반전
+        if(row[16]==="원정"){
+            if(row[13]==="승") resultColor="#dc2626";
+            if(row[13]==="패") resultColor="#2563eb";
+        }
 
         if(m.secret){
             badge=`<div class="secret-badge">
@@ -907,14 +911,38 @@ async function load(){
             </div>`;
         }
 
-        html+=`<div class="card">
-        ${badge}
-        <div><b>${row[6]}</b> vs <b>${row[7]}</b></div>
-        <div>승 ${row[8]} | 무 ${row[9]} | 패 ${row[10]}</div>
-        <div>${row[14]} · ${row[16]} · ${row[11]} · ${row[15]} · ${row[12]}</div>
-        <div class="info-btn">
-        <a href="/detail?no=${row[0]}${query}" style="color:#38bdf8;">정보</a>
-        </div>
+        html+=`
+        <div class="card">
+            ${badge}
+
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+
+                <div>
+                    <div><b>${row[6]}</b> vs <b>${row[7]}</b></div>
+                    <div style="font-size:12px;opacity:0.8;">
+                        ${row[14]} · ${row[16]} · ${row[11]} · ${row[15]} · ${row[12]}
+                    </div>
+                </div>
+
+                <div class="result-badge"
+                     style="background:${resultColor};">
+                     ${row[13]}
+                </div>
+
+            </div>
+
+            <div style="margin-top:6px;font-size:13px;">
+                승 ${row[8]} |
+                무 ${row[9]} |
+                패 ${row[10]}
+            </div>
+
+            <div class="info-btn">
+                <a href="/detail?no=${row[0]}${query}" style="color:#38bdf8;">
+                정보
+                </a>
+            </div>
+
         </div>`;
     });
 
