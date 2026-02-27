@@ -951,7 +951,7 @@ border-radius:999px;"></div>
 """
 
 # =====================================================
-# Page2 - 상세 분석 (FULL SAFE VERSION + H2H 확장)
+# Page2 - 상세 분석 (FULL SAFE VERSION + H2H + 원문복구)
 # =====================================================
 
 @app.get("/detail", response_class=HTMLResponse)
@@ -980,85 +980,38 @@ def detail(
     away   = row.iloc[COL_AWAY]
     league = row.iloc[COL_LEAGUE]
 
+    # 🔥 필터 적용
     filtered_df = apply_filters(CURRENT_DF, type, homeaway, general, dir, handi)
 
     # =====================================================
-    # 🔥 맞대결 기록 (정방향)
+    # 🔥 맞대결 기록 (정방향) — 필터 + 유형 일치 포함
     # =====================================================
 
-    h2h_df = CURRENT_DF[
-        (CURRENT_DF.iloc[:, COL_HOME] == home) &
-        (CURRENT_DF.iloc[:, COL_AWAY] == away) &
-        (CURRENT_DF.iloc[:, COL_RESULT] != "경기전")
+    h2h_df = filtered_df[
+        (filtered_df.iloc[:, COL_HOME] == home) &
+        (filtered_df.iloc[:, COL_AWAY] == away) &
+        (filtered_df.iloc[:, COL_TYPE] == row.iloc[COL_TYPE]) &
+        (filtered_df.iloc[:, COL_RESULT] != "경기전")
     ]
 
     h2h_dist = distribution(h2h_df)
-
-    # 결과 제외 출력용
-    def h2h_list_html(df):
-        html = ""
-        for _, r in df.iterrows():
-            html += f"""
-            <div style="font-size:12px;border-bottom:1px solid #334155;padding:6px 0;">
-            {r.iloc[COL_YEAR]} /
-            {r.iloc[COL_ROUND]} /
-            {r.iloc[COL_LEAGUE]} /
-            {r.iloc[COL_HOME]} vs {r.iloc[COL_AWAY]} /
-            {r.iloc[COL_TYPE]} /
-            {r.iloc[COL_HOMEAWAY]} /
-            {r.iloc[COL_GENERAL]} /
-            {r.iloc[COL_DIR]} /
-            {r.iloc[COL_HANDI]}
-            </div>
-            """
-        return html if html else "<div style='font-size:12px;'>경기 없음</div>"
-
-    h2h_list = h2h_list_html(
-        h2h_df.assign(
-            __no_numeric=pd.to_numeric(h2h_df.iloc[:, COL_NO], errors="coerce")
-        ).sort_values(
-            by="__no_numeric",
-            ascending=False
-        )
-    )
 
     # =====================================================
     # 🔥 맞대결 기록 (홈원정 반전)
     # =====================================================
 
-    h2h_rev_df = CURRENT_DF[
-        (CURRENT_DF.iloc[:, COL_HOME] == away) &
-        (CURRENT_DF.iloc[:, COL_AWAY] == home) &
-        (CURRENT_DF.iloc[:, COL_RESULT] != "경기전")
+    h2h_rev_df = filtered_df[
+        (filtered_df.iloc[:, COL_HOME] == away) &
+        (filtered_df.iloc[:, COL_AWAY] == home) &
+        (filtered_df.iloc[:, COL_TYPE] == row.iloc[COL_TYPE]) &
+        (filtered_df.iloc[:, COL_RESULT] != "경기전")
     ]
 
     h2h_rev_dist = distribution(h2h_rev_df)
 
-    h2h_rev_list = h2h_list_html(
-        h2h_rev_df.assign(
-            __no_numeric=pd.to_numeric(h2h_rev_df.iloc[:, COL_NO], errors="coerce")
-        ).sort_values(
-            by="__no_numeric",
-            ascending=False
-        )
-    )
-
     # =====================================================
-    # 기존 5조건 카드 영역 (원문 유지)
+    # 공통 경기목록 출력 (결과 제외)
     # =====================================================
-
-    base_cond = build_5cond(row)
-    base_df = run_filter(filtered_df, base_cond)
-    base_dist = distribution(base_df)
-
-    base_list_df = base_df[
-        base_df.iloc[:, COL_RESULT] != "경기전"
-    ].assign(
-        __no_numeric=pd.to_numeric(base_df.iloc[:, COL_NO], errors="coerce")
-    ).sort_values(
-        by="__no_numeric",
-        ascending=False
-    ).head(20)
 
     def match_list_html(df):
         html = ""
@@ -1078,8 +1031,98 @@ def detail(
             """
         return html if html else "<div style='font-size:12px;'>경기 없음</div>"
 
+    h2h_list_html_data = match_list_html(
+        h2h_df.sort_values(by=CURRENT_DF.columns[COL_NO], ascending=False)
+    )
+
+    h2h_rev_list_html_data = match_list_html(
+        h2h_rev_df.sort_values(by=CURRENT_DF.columns[COL_NO], ascending=False)
+    )
+
+    # =====================================================
+    # 🔥 기존 5조건 완전일치 카드 (원문 유지)
+    # =====================================================
+
+    base_cond = build_5cond(row)
+    base_df = run_filter(filtered_df, base_cond)
+    base_dist = distribution(base_df)
+
+    base_list_df = base_df[
+        base_df.iloc[:, COL_RESULT] != "경기전"
+    ].sort_values(
+        by=CURRENT_DF.columns[COL_NO],
+        ascending=False
+    ).head(20)
+
     base_list_html = match_list_html(base_list_df)
 
+    # =====================================================
+    # 🔥 동일리그 5조건 카드 (원문 복구)
+    # =====================================================
+
+    league_cond = build_league_cond(row)
+    league_df = run_filter(filtered_df, league_cond)
+    league_dist = distribution(league_df)
+
+    league_list_df = league_df[
+        league_df.iloc[:, COL_RESULT] != "경기전"
+    ].sort_values(
+        by=CURRENT_DF.columns[COL_NO],
+        ascending=False
+    ).head(20)
+
+    league_list_html = match_list_html(league_list_df)
+
+    # =====================================================
+    # 🔥 리그별 5조건 분포 카드 (하단 복구)
+    # =====================================================
+
+    league_group_df = run_filter(filtered_df, build_5cond(row))
+    league_group_df = league_group_df[
+        league_group_df.iloc[:, COL_RESULT] != "경기전"
+    ]
+
+    league_groups = league_group_df.groupby(
+        league_group_df.iloc[:, COL_LEAGUE]
+    )
+
+    card2_html = ""
+
+    for lg, group in league_groups:
+
+        dist = distribution(group)
+
+        list_html = match_list_html(
+            group.sort_values(
+                by=CURRENT_DF.columns[COL_NO],
+                ascending=False
+            ).head(20)
+        )
+
+        box_id = f"card2_{lg}"
+
+        card2_html += f"""
+        <div style="background:#1e293b;padding:16px;border-radius:16px;margin-top:20px;">
+        <h3>5조건 리그별 분포 ({dist["총"]}경기)</h3>
+
+        <div>승 {dist["wp"]}% ({dist["승"]}경기)</div>
+        {bar_html(dist["wp"],"win")}
+
+        <div>무 {dist["dp"]}% ({dist["무"]}경기)</div>
+        {bar_html(dist["dp"],"draw")}
+
+        <div>패 {dist["lp"]}% ({dist["패"]}경기)</div>
+        {bar_html(dist["lp"],"lose")}
+
+        <br>
+        <button onclick="toggleBox('{box_id}')">경기목록 보기/숨기기</button>
+        <div id="{box_id}" style="display:none;margin-top:10px;">
+        {list_html}
+        </div>
+        </div>
+        """
+
+    # 🔥 상단 필터 텍스트 정확히 출력
     condition_str = filter_text(type, homeaway, general, dir, handi)
 
     # =====================================================
@@ -1090,26 +1133,17 @@ def detail(
 <html>
 <body style="background:#0f1720;color:white;font-family:Arial;padding:20px;">
 
-<div style="display:flex;justify-content:space-between;align-items:center;">
 <h2>[{league}] {home} vs {away}</h2>
-</div>
 
 <div style="opacity:0.7;font-size:12px;margin-bottom:15px;">
 {condition_str}
 </div>
 
-<!-- ================= H2H 카드 ================= -->
-
 <div style="display:flex;gap:20px;flex-wrap:wrap;">
 
 <!-- 좌카드 -->
-<div style="flex:1;background:#1e293b;padding:16px;border-radius:16px;min-width:280px;">
-
+<div style="flex:1;background:#1e293b;padding:16px;border-radius:16px;">
 <h3>맞대결 기록 ({h2h_dist["총"]}경기)</h3>
-
-<div style="font-size:12px;opacity:0.7;margin-bottom:10px;">
-{row.iloc[COL_TYPE]} · {home} · {away}
-</div>
 
 <div>승 {h2h_dist["wp"]}% ({h2h_dist["승"]}경기)</div>
 {bar_html(h2h_dist["wp"],"win")}
@@ -1123,19 +1157,13 @@ def detail(
 <br>
 <button onclick="toggleBox('h2h1')">경기목록 보기/숨기기</button>
 <div id="h2h1" style="display:none;margin-top:10px;">
-{h2h_list}
+{h2h_list_html_data}
 </div>
-
 </div>
 
 <!-- 우카드 -->
-<div style="flex:1;background:#1e293b;padding:16px;border-radius:16px;min-width:280px;">
-
+<div style="flex:1;background:#1e293b;padding:16px;border-radius:16px;">
 <h3>맞대결 기록 홈원정 반전 ({h2h_rev_dist["총"]}경기)</h3>
-
-<div style="font-size:12px;opacity:0.7;margin-bottom:10px;">
-{row.iloc[COL_TYPE]} · {away} · {home}
-</div>
 
 <div>승 {h2h_rev_dist["wp"]}% ({h2h_rev_dist["승"]}경기)</div>
 {bar_html(h2h_rev_dist["wp"],"win")}
@@ -1149,29 +1177,24 @@ def detail(
 <br>
 <button onclick="toggleBox('h2h2')">경기목록 보기/숨기기</button>
 <div id="h2h2" style="display:none;margin-top:10px;">
-{h2h_rev_list}
+{h2h_rev_list_html_data}
 </div>
-
 </div>
 
 </div>
 
 <br><br>
 
-<!-- 기존 5조건 카드 (원문 구조 유지) -->
+<div style="display:flex;gap:20px;flex-wrap:wrap;">
 
-<div style="background:#1e293b;padding:16px;border-radius:16px;">
+<div style="flex:1;background:#1e293b;padding:16px;border-radius:16px;">
 <h3>5조건 완전일치 ({base_dist["총"]}경기)</h3>
-
 <div>승 {base_dist["wp"]}% ({base_dist["승"]}경기)</div>
 {bar_html(base_dist["wp"],"win")}
-
 <div>무 {base_dist["dp"]}% ({base_dist["무"]}경기)</div>
 {bar_html(base_dist["dp"],"draw")}
-
 <div>패 {base_dist["lp"]}% ({base_dist["패"]}경기)</div>
 {bar_html(base_dist["lp"],"lose")}
-
 <br>
 <button onclick="toggleBox('b1')">경기목록 보기/숨기기</button>
 <div id="b1" style="display:none;margin-top:10px;">
@@ -1179,14 +1202,38 @@ def detail(
 </div>
 </div>
 
+<div style="flex:1;background:#1e293b;padding:16px;border-radius:16px;">
+<h3>동일리그 5조건 ({league_dist["총"]}경기)</h3>
+<div>승 {league_dist["wp"]}% ({league_dist["승"]}경기)</div>
+{bar_html(league_dist["wp"],"win")}
+<div>무 {league_dist["dp"]}% ({league_dist["무"]}경기)</div>
+{bar_html(league_dist["dp"],"draw")}
+<div>패 {league_dist["lp"]}% ({league_dist["패"]}경기)</div>
+{bar_html(league_dist["lp"],"lose")}
+<br>
+<button onclick="toggleBox('b2')">경기목록 보기/숨기기</button>
+<div id="b2" style="display:none;margin-top:10px;">
+{league_list_html}
+</div>
+</div>
+
+</div>
+
+<br><br>
+
+<button onclick="toggleBox('card2_main')">
+5조건 리그별 분포 보기/숨기기
+</button>
+
+<div id="card2_main" style="display:none;">
+{card2_html}
+</div>
+
 <script>
 function toggleBox(id){{
     var el = document.getElementById(id);
-    if(el.style.display==="none"){{
-        el.style.display="block";
-    }}else{{
-        el.style.display="none";
-    }}
+    if(el.style.display==="none"){{ el.style.display="block"; }}
+    else{{ el.style.display="none"; }}
 }}
 </script>
 
