@@ -951,7 +951,7 @@ border-radius:999px;"></div>
 """
 
 # =====================================================
-# Page2 - 상세 분석 (MASTER VERSION)
+# Page2 - 상세 분석 (FULL SAFE VERSION + H2H + COUNT)
 # =====================================================
 
 @app.get("/detail", response_class=HTMLResponse)
@@ -983,7 +983,7 @@ def detail(
     filtered_df = apply_filters(CURRENT_DF, type, homeaway, general, dir, handi)
 
     # =====================================================
-    # 공통 함수
+    # 정렬 함수
     # =====================================================
 
     def sort_latest(df):
@@ -994,110 +994,24 @@ def detail(
             ascending=False
         ).head(20)
 
+    # =====================================================
+    # 경기목록 출력 함수
+    # =====================================================
+
     def match_list_html(df):
-
-    html = ""
-
-    for _, r in df.iterrows():
-
-        result = r.iloc[COL_RESULT]
-        homeaway = r.iloc[COL_HOMEAWAY]
-
-        # =========================
-        # 결과 뱃지 색상
-        # =========================
-        if result == "승":
-            badge_color = "#2563eb"   # 파랑
-        elif result == "무":
-            badge_color = "#16a34a"   # 초록
-        elif result == "패":
-            badge_color = "#dc2626"   # 빨강
-        else:
-            badge_color = "#64748b"
-
-        # =========================
-        # 홈/원정 강조 색상
-        # =========================
-        home_color = "#3b82f6"   # 홈 기본 파랑
-        away_color = "#ef4444"   # 원정 기본 빨강
-
-        # 현재 경기 기준 강조
-        if homeaway == "홈":
-            home_weight = "700"
-            away_weight = "500"
-        else:
-            home_weight = "500"
-            away_weight = "700"
-
-        html += f"""
-        <div style="
-            display:flex;
-            align-items:center;
-            justify-content:space-between;
-            padding:10px 0;
-            border-bottom:1px solid #1e293b;
-            font-size:13px;
-        ">
-
-            <!-- 좌측: 년도 / 회차 / 리그 -->
-            <div style="width:140px;opacity:0.8;">
-                {r.iloc[COL_YEAR]}/{r.iloc[COL_ROUND]}<br>
-                {r.iloc[COL_LEAGUE]}
+        html = ""
+        for _, r in df.iterrows():
+            html += f"""
+            <div style="font-size:12px;border-bottom:1px solid #334155;padding:6px 0;">
+            {r.iloc[COL_YEAR]} /
+            {r.iloc[COL_ROUND]} /
+            {r.iloc[COL_LEAGUE]} /
+            {r.iloc[COL_HOME]} vs {r.iloc[COL_AWAY]} /
+            {r.iloc[COL_WIN_ODDS]} | {r.iloc[COL_DRAW_ODDS]} | {r.iloc[COL_LOSE_ODDS]} /
+            결과 {r.iloc[COL_RESULT]}
             </div>
-
-            <!-- 결과 뱃지 -->
-            <div style="
-                width:34px;height:34px;
-                border-radius:50%;
-                background:{badge_color};
-                display:flex;
-                align-items:center;
-                justify-content:center;
-                font-weight:bold;
-                color:white;
-                font-size:14px;
-            ">
-                {result}
-            </div>
-
-            <!-- 홈팀 -->
-            <div style="
-                flex:1;
-                text-align:right;
-                padding-right:10px;
-                font-weight:{home_weight};
-                color:{home_color};
-            ">
-                {r.iloc[COL_HOME]}
-            </div>
-
-            <!-- 배당 -->
-            <div style="
-                width:160px;
-                text-align:center;
-                font-size:12px;
-                opacity:0.9;
-            ">
-                {r.iloc[COL_WIN_ODDS]} |
-                {r.iloc[COL_DRAW_ODDS]} |
-                {r.iloc[COL_LOSE_ODDS]}
-            </div>
-
-            <!-- 원정팀 -->
-            <div style="
-                flex:1;
-                text-align:left;
-                padding-left:10px;
-                font-weight:{away_weight};
-                color:{away_color};
-            ">
-                {r.iloc[COL_AWAY]}
-            </div>
-
-        </div>
-        """
-
-    return html if html else "<div style='font-size:12px;'>경기 없음</div>"
+            """
+        return html if html else "<div style='font-size:12px;'>경기 없음</div>"
 
     # =====================================================
     # 0️⃣ 맞대결 카드
@@ -1106,8 +1020,7 @@ def detail(
     h2h_df = CURRENT_DF[
         (
             ((CURRENT_DF.iloc[:, COL_HOME] == home) &
-             (CURRENT_DF.iloc[:, COL_AWAY] == away))
-            |
+             (CURRENT_DF.iloc[:, COL_AWAY] == away)) |
             ((CURRENT_DF.iloc[:, COL_HOME] == away) &
              (CURRENT_DF.iloc[:, COL_AWAY] == home))
         ) &
@@ -1118,7 +1031,7 @@ def detail(
     h2h_list_html = match_list_html(sort_latest(h2h_df))
 
     # =====================================================
-    # 1️⃣ 카드1 - 5조건
+    # 카드1 - 5조건
     # =====================================================
 
     base_df = run_filter(filtered_df, build_5cond(row))
@@ -1126,12 +1039,35 @@ def detail(
     base_list_html = match_list_html(sort_latest(base_df))
 
     # =====================================================
-    # 2️⃣ 동일리그
+    # 카드2 - 동일리그
     # =====================================================
 
     league_df = run_filter(filtered_df, build_league_cond(row))
     league_dist = distribution(league_df)
     league_list_html = match_list_html(sort_latest(league_df))
+
+    # =====================================================
+    # 조건 텍스트
+    # =====================================================
+
+    five_cond_text = (
+        f"{row.iloc[COL_TYPE]} · "
+        f"{row.iloc[COL_HOMEAWAY]} · "
+        f"{row.iloc[COL_GENERAL]} · "
+        f"{row.iloc[COL_DIR]} · "
+        f"{row.iloc[COL_HANDI]}"
+    )
+
+    league_cond_text = (
+        f"{row.iloc[COL_LEAGUE]} · "
+        f"{row.iloc[COL_TYPE]} · "
+        f"{row.iloc[COL_HOMEAWAY]} · "
+        f"{row.iloc[COL_GENERAL]} · "
+        f"{row.iloc[COL_DIR]} · "
+        f"{row.iloc[COL_HANDI]}"
+    )
+
+    condition_str = filter_text(type, homeaway, general, dir, handi)
 
     # =====================================================
     # HTML
@@ -1143,10 +1079,13 @@ def detail(
 
 <h2>[{league}] {home} vs {away}</h2>
 
+<div style="opacity:0.7;font-size:12px;margin-bottom:15px;">
+현재 필터: {condition_str}
+</div>
+
 <!-- ================= 맞대결 카드 ================= -->
 
-<div style="background:#1e293b;padding:20px;border-radius:18px;margin-bottom:20px;">
-
+<div style="background:#1e293b;padding:16px;border-radius:16px;margin-bottom:20px;">
 <h3>🤝 맞대결 기록</h3>
 총 {h2h_dist["총"]}경기
 
@@ -1164,16 +1103,17 @@ def detail(
 <div id="h2h_box" style="display:none;margin-top:10px;">
 {h2h_list_html}
 </div>
-
 </div>
 
 <!-- ================= 카드1 ================= -->
 
 <div style="display:flex;gap:20px;flex-wrap:wrap;">
 
-<div style="flex:1;background:#1e293b;padding:20px;border-radius:18px;min-width:280px;">
-
+<div style="flex:1;background:#1e293b;padding:16px;border-radius:16px;min-width:280px;">
 <h3>5조건 완전일치</h3>
+<div style="font-size:12px;opacity:0.7;margin-bottom:10px;">
+{five_cond_text}
+</div>
 총 {base_dist["총"]}경기
 
 <div>승 {base_dist["wp"]}% ({base_dist["승"]}경기)</div>
@@ -1190,12 +1130,13 @@ def detail(
 <div id="b1" style="display:none;margin-top:10px;">
 {base_list_html}
 </div>
-
 </div>
 
-<div style="flex:1;background:#1e293b;padding:20px;border-radius:18px;min-width:280px;">
-
+<div style="flex:1;background:#1e293b;padding:16px;border-radius:16px;min-width:280px;">
 <h3>동일리그 5조건</h3>
+<div style="font-size:12px;opacity:0.7;margin-bottom:10px;">
+{league_cond_text}
+</div>
 총 {league_dist["총"]}경기
 
 <div>승 {league_dist["wp"]}% ({league_dist["승"]}경기)</div>
@@ -1212,7 +1153,6 @@ def detail(
 <div id="b2" style="display:none;margin-top:10px;">
 {league_list_html}
 </div>
-
 </div>
 
 </div>
