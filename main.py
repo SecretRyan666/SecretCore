@@ -878,6 +878,58 @@ function closeModal(){
 document.getElementById("filterModal").style.display="none";
 }
 
+async function loadFilters(){
+
+    let res = await fetch("/filters");
+    let data = await res.json();
+
+    let area = document.getElementById("filterArea");
+    area.innerHTML = "";
+
+    function createGroup(title, key){
+        if(!data[key] || data[key].length===0) return;
+
+        let div = document.createElement("div");
+        div.className="checkbox-group";
+
+        let html = `<b>${title}</b><br>`;
+        data[key].forEach(v=>{
+            html += `
+            <label style="display:block;font-size:13px;">
+            <input type="checkbox" name="${key}" value="${v}">
+            ${v}
+            </label>`;
+        });
+
+        div.innerHTML = html;
+        area.appendChild(div);
+    }
+
+    createGroup("유형","type");
+    createGroup("홈/원정","homeaway");
+    createGroup("일반","general");
+    createGroup("정역","dir");
+    createGroup("핸디","handi");
+}
+
+function applyFilters(){
+
+    let params = new URLSearchParams();
+
+    ["type","homeaway","general","dir","handi"].forEach(key=>{
+
+        let checked = Array.from(
+            document.querySelectorAll(`input[name="${key}"]:checked`)
+        ).map(el=>el.value);
+
+        if(checked.length>0){
+            params.set(key, checked.join(","));
+        }
+    });
+
+    window.location.href = "/?" + params.toString();
+}
+
 async function load(){
 
     let params = new URLSearchParams(window.location.search);
