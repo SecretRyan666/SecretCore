@@ -1227,14 +1227,14 @@ def detail(
 <button onclick="history.back()">← 뒤로</button>
 
 <script>
-function toggleBox(id){
+function toggleBox(id){{
     var el = document.getElementById(id);
-    if(el.style.display==="none"){
+    if(el.style.display==="none"){{
         el.style.display="block";
-    }else{
+    }}else{{
         el.style.display="none";
-    }
-}
+    }}
+}}
 </script>
 
 </body>
