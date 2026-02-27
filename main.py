@@ -982,29 +982,6 @@ def detail(
 
     filtered_df = apply_filters(CURRENT_DF, type, homeaway, general, dir, handi)
 
-    # =============================
-    # 맞대결 카드
-    # =============================
-
-    h2h_df = CURRENT_DF[
-        (
-            ((CURRENT_DF.iloc[:, COL_HOME] == home) &
-             (CURRENT_DF.iloc[:, COL_AWAY] == away)) |
-            ((CURRENT_DF.iloc[:, COL_HOME] == away) &
-             (CURRENT_DF.iloc[:, COL_AWAY] == home))
-        ) &
-        (CURRENT_DF.iloc[:, COL_RESULT] != "경기전")
-    ]
-
-    h2h_dist = distribution(h2h_df)
-
-    h2h_list_df = h2h_df.assign(
-        __no_numeric=pd.to_numeric(h2h_df.iloc[:, COL_NO], errors="coerce")
-    ).sort_values(
-        by="__no_numeric",
-        ascending=False
-    ).head(20)
-
     # -----------------------------
     # 카드1 - 5조건
     # -----------------------------
@@ -1022,7 +999,7 @@ def detail(
     ).head(20)
 
     # -----------------------------
-    # 카드2 - 동일리그
+    # 카드1-2 - 동일리그 5조건
     # -----------------------------
     league_cond = build_league_cond(row)
     league_df = run_filter(filtered_df, league_cond)
@@ -1037,8 +1014,53 @@ def detail(
         ascending=False
     ).head(20)
 
+    # -----------------------------
+    # 경기목록 HTML 생성 함수
+    # -----------------------------
+    def match_list_html(df):
+        html = ""
+        for _, r in df.iterrows():
+            html += f"""
+            <div style="font-size:12px;border-bottom:1px solid #334155;padding:6px 0;">
+            {r.iloc[COL_YEAR]} /
+            {r.iloc[COL_ROUND]} /
+            {r.iloc[COL_LEAGUE]} /
+            {r.iloc[COL_HOME]} vs {r.iloc[COL_AWAY]} /
+            {r.iloc[COL_HOMEAWAY]} /
+            {r.iloc[COL_GENERAL]} /
+            {r.iloc[COL_DIR]} /
+            {r.iloc[COL_HANDI]} /
+            {r.iloc[COL_WIN_ODDS]} /
+            {r.iloc[COL_DRAW_ODDS]} /
+            {r.iloc[COL_LOSE_ODDS]} /
+            {r.iloc[COL_RESULT]}
+            </div>
+            """
+        return html if html else "<div style='font-size:12px;'>경기 없음</div>"
+
+    base_list_html = match_list_html(base_list_df)
+    league_list_html = match_list_html(league_list_df)
+
+    # 카드 상단 조건 텍스트
+    five_cond_text = (
+        f"{row.iloc[COL_TYPE]} · "
+        f"{row.iloc[COL_HOMEAWAY]} · "
+        f"{row.iloc[COL_GENERAL]} · "
+        f"{row.iloc[COL_DIR]} · "
+        f"{row.iloc[COL_HANDI]}"
+    )
+
+    league_cond_text = (
+        f"{row.iloc[COL_LEAGUE]} · "
+        f"{row.iloc[COL_TYPE]} · "
+        f"{row.iloc[COL_HOMEAWAY]} · "
+        f"{row.iloc[COL_GENERAL]} · "
+        f"{row.iloc[COL_DIR]} · "
+        f"{row.iloc[COL_HANDI]}"
+    )
+
     # =====================================================
-    # 하단 리그별 분포
+    # 카드2 - 5조건 리그별 분포 + 경기목록
     # =====================================================
 
     league_group_df = run_filter(filtered_df, build_5cond(row))
@@ -1056,80 +1078,52 @@ def detail(
 
         dist = distribution(group)
 
-        box_id = f"lg_{lg}"
+        list_df = group.assign(
+            __no_numeric=pd.to_numeric(group.iloc[:, COL_NO], errors="coerce")
+        ).sort_values(
+            by="__no_numeric",
+            ascending=False
+        ).head(20)
+
+        list_html = match_list_html(list_df)
+
+        box_id = f"card2_{lg}"
 
         card2_html += f"""
-        <div style="background:#1e293b;padding:16px;border-radius:16px;margin-top:20px;">
-        <h3>리그: {lg}</h3>
+        <div style="background:#1e293b;
+        padding:16px;border-radius:16px;
+        margin-top:20px;">
+
+        <h3>5조건 리그별 분포</h3>
+
+        <div style="font-size:12px;opacity:0.7;margin-bottom:10px;">
+        5조건 + {lg}
+        </div>
+
         총 {dist["총"]}경기
 
-        <div>승 {dist["wp"]}% ({dist["승"]}경기)</div>
+        <div>승 {dist["wp"]}%</div>
         {bar_html(dist["wp"],"win")}
 
-        <div>무 {dist["dp"]}% ({dist["무"]}경기)</div>
+        <div>무 {dist["dp"]}%</div>
         {bar_html(dist["dp"],"draw")}
 
-        <div>패 {dist["lp"]}% ({dist["패"]}경기)</div>
+        <div>패 {dist["lp"]}%</div>
         {bar_html(dist["lp"],"lose")}
+
+        <br>
+        <button onclick="toggleBox('{box_id}')">
+        경기목록 보기/숨기기
+        </button>
+
+        <div id="{box_id}" style="display:none;margin-top:10px;">
+        {list_html}
+        </div>
+
         </div>
         """
 
-    # -----------------------------
-    # 경기목록 HTML
-    # -----------------------------
-
-    def match_list_html(df, show_condition=False):
-        html = ""
-        for _, r in df.iterrows():
-
-            cond_text = (
-                f"{r.iloc[COL_TYPE]} · "
-                f"{r.iloc[COL_HOMEAWAY]} · "
-                f"{r.iloc[COL_GENERAL]} · "
-                f"{r.iloc[COL_DIR]} · "
-                f"{r.iloc[COL_HANDI]}"
-            )
-
-            if show_condition:
-                extra = f" / {cond_text}"
-            else:
-                extra = ""
-
-            html += f"""
-            <div style="font-size:12px;border-bottom:1px solid #334155;padding:6px 0;">
-            {r.iloc[COL_YEAR]} /
-            {r.iloc[COL_ROUND]} /
-            {r.iloc[COL_LEAGUE]} /
-            {r.iloc[COL_TYPE]} /
-            {r.iloc[COL_HOME]} vs {r.iloc[COL_AWAY]}{extra} /
-            승 {r.iloc[COL_WIN_ODDS]} | 무 {r.iloc[COL_DRAW_ODDS]} | 패 {r.iloc[COL_LOSE_ODDS]} /
-            결과 {r.iloc[COL_RESULT]}
-            </div>
-            """
-        return html if html else "<div style='font-size:12px;'>경기 없음</div>"
-
-    h2h_list_html = match_list_html(h2h_list_df, True)
-    base_list_html = match_list_html(base_list_df, False)
-    league_list_html = match_list_html(league_list_df, False)
-
-    # -----------------------------
-    # 조건 텍스트
-    # -----------------------------
-
-    five_cond_text = (
-        f"{row.iloc[COL_TYPE]} · "
-        f"{row.iloc[COL_HOMEAWAY]} · "
-        f"{row.iloc[COL_GENERAL]} · "
-        f"{row.iloc[COL_DIR]} · "
-        f"{row.iloc[COL_HANDI]}"
-    )
-
-    h2h_condition_text = f"{row.iloc[COL_TYPE]} · {home} vs {away} · {five_cond_text}"
-
     condition_str = filter_text(type, homeaway, general, dir, handi)
-
-    if condition_str == "기본조건":
-        condition_str = five_cond_text
 
     return f"""
 <html>
@@ -1148,38 +1142,59 @@ def detail(
 현재 필터: {condition_str}
 </div>
 
-<!-- 맞대결 카드 -->
-<div style="background:#1e293b;padding:16px;border-radius:16px;margin-bottom:20px;">
-<h3>맞대결 기록</h3>
+<div style="display:flex;gap:20px;flex-wrap:wrap;">
+
+<!-- 카드1 -->
+<div style="flex:1;background:#1e293b;padding:16px;border-radius:16px;min-width:280px;">
+<h3>5조건 완전일치</h3>
 <div style="font-size:12px;opacity:0.7;margin-bottom:10px;">
-{h2h_condition_text}
+{five_cond_text}
 </div>
-
-총 {h2h_dist["총"]}경기
-
-<div>승 {h2h_dist["wp"]}% ({h2h_dist["승"]}경기)</div>
-{bar_html(h2h_dist["wp"],"win")}
-
-<div>무 {h2h_dist["dp"]}% ({h2h_dist["무"]}경기)</div>
-{bar_html(h2h_dist["dp"],"draw")}
-
-<div>패 {h2h_dist["lp"]}% ({h2h_dist["패"]}경기)</div>
-{bar_html(h2h_dist["lp"],"lose")}
+총 {base_dist["총"]}경기
+<div>승 {base_dist["wp"]}%</div>
+{bar_html(base_dist["wp"],"win")}
+<div>무 {base_dist["dp"]}%</div>
+{bar_html(base_dist["dp"],"draw")}
+<div>패 {base_dist["lp"]}%</div>
+{bar_html(base_dist["lp"],"lose")}
 
 <br>
-<button onclick="toggleBox('h2h_box')">경기목록 보기/숨기기</button>
-<div id="h2h_box" style="display:none;margin-top:10px;">
-{h2h_list_html}
+<button onclick="toggleBox('b1')">경기목록 보기/숨기기</button>
+<div id="b1" style="display:none;margin-top:10px;">
+{base_list_html}
 </div>
 </div>
+
+<!-- 카드2 동일리그 -->
+<div style="flex:1;background:#1e293b;padding:16px;border-radius:16px;min-width:280px;">
+<h3>동일리그 5조건</h3>
+<div style="font-size:12px;opacity:0.7;margin-bottom:10px;">
+{league_cond_text}
+</div>
+총 {league_dist["총"]}경기
+<div>승 {league_dist["wp"]}%</div>
+{bar_html(league_dist["wp"],"win")}
+<div>무 {league_dist["dp"]}%</div>
+{bar_html(league_dist["dp"],"draw")}
+<div>패 {league_dist["lp"]}%</div>
+{bar_html(league_dist["lp"],"lose")}
 
 <br>
+<button onclick="toggleBox('b2')">경기목록 보기/숨기기</button>
+<div id="b2" style="display:none;margin-top:10px;">
+{league_list_html}
+</div>
+</div>
 
-<button onclick="toggleBox('league_dist_box')" style="margin-bottom:10px;">
-리그별 분포 보기/숨기기
+</div>
+
+<br><br>
+
+<button onclick="toggleBox('card2_main')" style="margin-bottom:10px;">
+5조건 리그별 분포 보기/숨기기
 </button>
 
-<div id="league_dist_box" style="display:none;">
+<div id="card2_main" style="display:none;">
 {card2_html}
 </div>
 
