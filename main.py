@@ -1109,12 +1109,14 @@ def detail(
     h2h_df = CURRENT_DF[
         (CURRENT_DF.iloc[:, COL_HOME] == home) &
         (CURRENT_DF.iloc[:, COL_AWAY] == away) &
+        (CURRENT_DF.iloc[:, COL_TYPE] == row.iloc[COL_TYPE]) &
         (CURRENT_DF.iloc[:, COL_RESULT] != "경기전")
     ]
 
     h2h_reverse_df = CURRENT_DF[
         (CURRENT_DF.iloc[:, COL_HOME] == away) &
         (CURRENT_DF.iloc[:, COL_AWAY] == home) &
+        (CURRENT_DF.iloc[:, COL_TYPE] == row.iloc[COL_TYPE]) &
         (CURRENT_DF.iloc[:, COL_RESULT] != "경기전")
     ]
 
