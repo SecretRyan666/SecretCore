@@ -1003,9 +1003,8 @@ border-radius:999px;"></div>
 """
 
 # =====================================================
-# Page2 - 상세 분석 (ULTRA MASTER FINAL)
-# 카드1 좌우 / 카드2 좌우 / 리그별 분포
-# 상단 우측 3버튼 완전복원
+# Page2 - 상세 분석 (ULTRA MASTER FINAL COMPLETE)
+# 카드1 좌우 / 카드2 좌우 / 카드3 리그별 / 3버튼 / 경기수표시 전부포함
 # =====================================================
 
 @app.get("/detail", response_class=HTMLResponse)
@@ -1035,7 +1034,7 @@ def detail(
     league = row.iloc[COL_LEAGUE]
 
     card_condition = (
-        f"{row.iloc[COL_TYPE]} · "
+        f"유형={row.iloc[COL_TYPE]} · "
         f"{row.iloc[COL_HOMEAWAY]} · "
         f"{row.iloc[COL_GENERAL]} · "
         f"{row.iloc[COL_DIR]} · "
@@ -1096,7 +1095,7 @@ def detail(
             <div style="font-size:12px;border-bottom:1px solid #334155;padding:6px 0;">
             {r.iloc[COL_YEAR]} · {r.iloc[COL_ROUND]} · {r.iloc[COL_LEAGUE]} ·
             {r.iloc[COL_HOME]} vs {r.iloc[COL_AWAY]} ·
-            {r.iloc[COL_TYPE]} · {r.iloc[COL_HOMEAWAY]} ·
+            유형={r.iloc[COL_TYPE]} · {r.iloc[COL_HOMEAWAY]} ·
             {r.iloc[COL_GENERAL]} · {r.iloc[COL_DIR]} · {r.iloc[COL_HANDI]}
             {result_circle(r.iloc[COL_RESULT], reverse)}
             </div>
@@ -1153,15 +1152,15 @@ def detail(
         <div style="background:#1e293b;padding:16px;
         border-radius:16px;margin-top:20px;">
 
-        <h3>리그별 분포 - {lg} ({dist["총"]}경기)</h3>
+        <h3>카드3 - 리그별 분포 ({lg})  총 ({dist["총"]}경기)</h3>
 
-        <div style="font-size:12px;opacity:0.7;margin-bottom:10px;">
+        <div style="font-size:12px;opacity:0.7;">
         조건: 리그={lg} · {card_condition}
         </div>
 
-        <div>승 {dist["wp"]}%</div>{bar_html(dist["wp"],"win")}
-        <div>무 {dist["dp"]}%</div>{bar_html(dist["dp"],"draw")}
-        <div>패 {dist["lp"]}%</div>{bar_html(dist["lp"],"lose")}
+        <div>승 {dist["wp"]}% ({dist["승"]}경기)</div>{bar_html(dist["wp"],"win")}
+        <div>무 {dist["dp"]}% ({dist["무"]}경기)</div>{bar_html(dist["dp"],"draw")}
+        <div>패 {dist["lp"]}% ({dist["패"]}경기)</div>{bar_html(dist["lp"],"lose")}
 
         <button onclick="toggleBox('{box_id}')">경기목록</button>
         <div id="{box_id}" style="display:none;">
@@ -1184,14 +1183,9 @@ font-family:Arial;padding:20px;">
 <h2>[{league}] {home} vs {away}</h2>
 
 <div style="display:flex;gap:12px;">
-<a href="/page3?no={no}&away=0"
-style="color:#38bdf8;">홈팀분석</a>
-
-<a href="/page3?no={no}&away=1"
-style="color:#38bdf8;">원정팀분석</a>
-
-<a href="/page4?no={no}"
-style="color:#38bdf8;">배당분석</a>
+<a href="/page3?no={no}&away=0" style="color:#38bdf8;">홈팀분석</a>
+<a href="/page3?no={no}&away=1" style="color:#38bdf8;">원정팀분석</a>
+<a href="/page4?no={no}" style="color:#38bdf8;">배당분석</a>
 </div>
 
 </div>
@@ -1203,25 +1197,25 @@ style="color:#38bdf8;">배당분석</a>
 <!-- 카드1 -->
 <div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:25px;">
 <div style="flex:1;background:#1e293b;padding:16px;border-radius:16px;">
-<h3>카드1 - 맞대결 (정방향)</h3>
+<h3>카드1 - 맞대결 (정방향)  총 ({h2h_dist["총"]}경기)</h3>
 <div style="font-size:12px;opacity:0.7;">
-조건: 홈={home} · 원정={away}
+조건: 유형={row.iloc[COL_TYPE]} · 홈={home} · 원정={away}
 </div>
-<div>승 {h2h_dist["wp"]}%</div>{bar_html(h2h_dist["wp"],"win")}
-<div>무 {h2h_dist["dp"]}%</div>{bar_html(h2h_dist["dp"],"draw")}
-<div>패 {h2h_dist["lp"]}%</div>{bar_html(h2h_dist["lp"],"lose")}
+<div>승 {h2h_dist["wp"]}% ({h2h_dist["승"]}경기)</div>{bar_html(h2h_dist["wp"],"win")}
+<div>무 {h2h_dist["dp"]}% ({h2h_dist["무"]}경기)</div>{bar_html(h2h_dist["dp"],"draw")}
+<div>패 {h2h_dist["lp"]}% ({h2h_dist["패"]}경기)</div>{bar_html(h2h_dist["lp"],"lose")}
 <button onclick="toggleBox('h1')">경기목록</button>
 <div id="h1" style="display:none;">{match_list_html(h2h_df)}</div>
 </div>
 
 <div style="flex:1;background:#1e293b;padding:16px;border-radius:16px;">
-<h3>카드1 - 맞대결 (역방향)</h3>
+<h3>카드1 - 맞대결 (역방향)  총 ({h2h_reverse_dist["총"]}경기)</h3>
 <div style="font-size:12px;opacity:0.7;">
-조건: 홈={away} · 원정={home}
+조건: 유형={row.iloc[COL_TYPE]} · 홈={away} · 원정={home}
 </div>
-<div>승 {h2h_reverse_dist["wp"]}%</div>{bar_html(h2h_reverse_dist["wp"],"win")}
-<div>무 {h2h_reverse_dist["dp"]}%</div>{bar_html(h2h_reverse_dist["dp"],"draw")}
-<div>패 {h2h_reverse_dist["lp"]}%</div>{bar_html(h2h_reverse_dist["lp"],"lose")}
+<div>승 {h2h_reverse_dist["wp"]}% ({h2h_reverse_dist["승"]}경기)</div>{bar_html(h2h_reverse_dist["wp"],"win")}
+<div>무 {h2h_reverse_dist["dp"]}% ({h2h_reverse_dist["무"]}경기)</div>{bar_html(h2h_reverse_dist["dp"],"draw")}
+<div>패 {h2h_reverse_dist["lp"]}% ({h2h_reverse_dist["패"]}경기)</div>{bar_html(h2h_reverse_dist["lp"],"lose")}
 <button onclick="toggleBox('h2')">경기목록</button>
 <div id="h2" style="display:none;">
 {match_list_html(h2h_reverse_df,True)}
@@ -1232,13 +1226,13 @@ style="color:#38bdf8;">배당분석</a>
 <!-- 카드2 -->
 <div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:25px;">
 <div style="flex:1;background:#1e293b;padding:16px;border-radius:16px;">
-<h3>카드2 - 5조건 전체</h3>
+<h3>카드2 - 5조건 전체  총 ({base_dist["총"]}경기)</h3>
 <div style="font-size:12px;opacity:0.7;">
 조건: {card_condition}
 </div>
-<div>승 {base_dist["wp"]}%</div>{bar_html(base_dist["wp"],"win")}
-<div>무 {base_dist["dp"]}%</div>{bar_html(base_dist["dp"],"draw")}
-<div>패 {base_dist["lp"]}%</div>{bar_html(base_dist["lp"],"lose")}
+<div>승 {base_dist["wp"]}% ({base_dist["승"]}경기)</div>{bar_html(base_dist["wp"],"win")}
+<div>무 {base_dist["dp"]}% ({base_dist["무"]}경기)</div>{bar_html(base_dist["dp"],"draw")}
+<div>패 {base_dist["lp"]}% ({base_dist["패"]}경기)</div>{bar_html(base_dist["lp"],"lose")}
 <button onclick="toggleBox('b1')">경기목록</button>
 <div id="b1" style="display:none;">
 {match_list_html(base_df)}
@@ -1246,13 +1240,13 @@ style="color:#38bdf8;">배당분석</a>
 </div>
 
 <div style="flex:1;background:#1e293b;padding:16px;border-radius:16px;">
-<h3>카드2 - 동일리그 5조건</h3>
+<h3>카드2 - 동일리그 5조건  총 ({league_dist["총"]}경기)</h3>
 <div style="font-size:12px;opacity:0.7;">
 조건: 리그={league} · {card_condition}
 </div>
-<div>승 {league_dist["wp"]}%</div>{bar_html(league_dist["wp"],"win")}
-<div>무 {league_dist["dp"]}%</div>{bar_html(league_dist["dp"],"draw")}
-<div>패 {league_dist["lp"]}%</div>{bar_html(league_dist["lp"],"lose")}
+<div>승 {league_dist["wp"]}% ({league_dist["승"]}경기)</div>{bar_html(league_dist["wp"],"win")}
+<div>무 {league_dist["dp"]}% ({league_dist["무"]}경기)</div>{bar_html(league_dist["dp"],"draw")}
+<div>패 {league_dist["lp"]}% ({league_dist["패"]}경기)</div>{bar_html(league_dist["lp"],"lose")}
 <button onclick="toggleBox('b2')">경기목록</button>
 <div id="b2" style="display:none;">
 {match_list_html(league_df)}
@@ -1262,7 +1256,7 @@ style="color:#38bdf8;">배당분석</a>
 
 <!-- 카드3 -->
 <button onclick="toggleBox('lg_card')">
-5조건 리그별 분포 보기/숨기기
+카드3 - 리그별 분포 보기/숨기기
 </button>
 
 <div id="lg_card" style="display:none;">
