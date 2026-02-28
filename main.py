@@ -1438,16 +1438,18 @@ def page3_view(no: str = None, away: int = 0):
         """
 
     # ======================================================
-    # 카드1
+    # 카드1 (유형 필터 추가 완료)
     # ======================================================
 
     team_home_df = CURRENT_DF[
         (CURRENT_DF.iloc[:, COL_HOME] == team) &
+        (CURRENT_DF.iloc[:, COL_TYPE] == row.iloc[COL_TYPE]) &
         (CURRENT_DF.iloc[:, COL_RESULT] != "경기전")
     ]
 
     team_away_df = CURRENT_DF[
         (CURRENT_DF.iloc[:, COL_AWAY] == team) &
+        (CURRENT_DF.iloc[:, COL_TYPE] == row.iloc[COL_TYPE]) &
         (CURRENT_DF.iloc[:, COL_RESULT] != "경기전")
     ]
 
@@ -1455,7 +1457,7 @@ def page3_view(no: str = None, away: int = 0):
     dist_away = distribution(team_away_df)
 
     # ======================================================
-    # 카드2
+    # 카드2 (원문 그대로)
     # ======================================================
 
     team_5cond_df = CURRENT_DF[
@@ -1479,7 +1481,7 @@ def page3_view(no: str = None, away: int = 0):
     dist_5cond_league = distribution(team_5cond_league_df)
 
     # ======================================================
-    # 카드3
+    # 카드3 (상위 토글 추가)
     # ======================================================
 
     team_general_df = CURRENT_DF[
@@ -1615,22 +1617,27 @@ def page3_view(no: str = None, away: int = 0):
 <br>
 
 <!-- 카드3 -->
+<button onclick="toggleBox('card3_all')">
+카드3 - 일반구분 분포 보기/숨기기
+</button>
+
+<div id="card3_all" style="display:none;">
 {general_html}
+</div>
 
 <br><br>
 <button onclick="history.back()">← 뒤로가기</button>
 
 <script>
-function toggleBox(id){{
+function toggleBox(id){
     var el=document.getElementById(id);
-    if(el.style.display==="none"){{el.style.display="block";}}
-    else{{el.style.display="none";}}
-}}
+    if(el.style.display==="none"){el.style.display="block";}
+    else{el.style.display="none";}
+}
 </script>
 
 </body>
 </html>
-"""
 
 # =====================================================
 # Page4 - 배당 분석
