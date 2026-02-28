@@ -1003,7 +1003,9 @@ border-radius:999px;"></div>
 """
 
 # =====================================================
-# Page2 - 상세 분석 (ULTRA MASTER FINAL COMPLETE)
+# Page2 - 상세 분석 (ULTRA MASTER FINAL)
+# 카드1 좌우 / 카드2 좌우 / 리그별 분포
+# 상단 우측 3버튼 완전복원
 # =====================================================
 
 @app.get("/detail", response_class=HTMLResponse)
@@ -1028,17 +1030,17 @@ def detail(
 
     row = row_df.iloc[0]
 
-    condition_str = (
+    home   = row.iloc[COL_HOME]
+    away   = row.iloc[COL_AWAY]
+    league = row.iloc[COL_LEAGUE]
+
+    card_condition = (
         f"{row.iloc[COL_TYPE]} · "
         f"{row.iloc[COL_HOMEAWAY]} · "
         f"{row.iloc[COL_GENERAL]} · "
         f"{row.iloc[COL_DIR]} · "
         f"{row.iloc[COL_HANDI]}"
     )
-
-    home   = row.iloc[COL_HOME]
-    away   = row.iloc[COL_AWAY]
-    league = row.iloc[COL_LEAGUE]
 
     odds_text = (
         f"승 {row.iloc[COL_WIN_ODDS]} · "
@@ -1048,18 +1050,16 @@ def detail(
 
     filtered_df = apply_filters(CURRENT_DF, type, homeaway, general, dir, handi)
 
-    # =========================
-    # 막대그래프
-    # =========================
+    # =====================================================
+    # 공통 UI
+    # =====================================================
 
     def bar_html(percent, mode="win"):
-
         color_map = {
             "win":"linear-gradient(90deg,#3b82f6,#2563eb)",
             "draw":"linear-gradient(90deg,#22c55e,#16a34a)",
             "lose":"linear-gradient(90deg,#ef4444,#dc2626)"
         }
-
         return f"""
         <div style="width:100%;background:rgba(255,255,255,0.08);
         border-radius:999px;height:14px;margin:6px 0;">
@@ -1070,72 +1070,42 @@ def detail(
         </div>
         """
 
-    # =========================
-    # 결과 동그라미
-    # =========================
-
     def result_circle(result, reverse=False):
-
         if not reverse:
             color_map = {"승":"#3b82f6","무":"#22c55e","패":"#ef4444"}
         else:
             color_map = {"승":"#ef4444","무":"#22c55e","패":"#3b82f6"}
-
         color = color_map.get(result, "#64748b")
-
         return f"""
-        <span style="
-            display:inline-flex;
-            align-items:center;
-            justify-content:center;
-            width:22px;
-            height:22px;
-            border-radius:50%;
-            background:{color};
-            color:white;
-            font-size:12px;
-            font-weight:bold;
-            margin-left:6px;">
-            {result}
-        </span>
+        <span style="display:inline-flex;
+        align-items:center;justify-content:center;
+        width:22px;height:22px;border-radius:50%;
+        background:{color};color:white;
+        font-size:12px;font-weight:bold;margin-left:6px;">
+        {result}</span>
         """
 
-    # =========================
-    # 경기목록
-    # =========================
-
     def match_list_html(df, reverse=False):
-
         df = df.assign(
             __no_numeric=pd.to_numeric(df.iloc[:, COL_NO], errors="coerce")
-        ).sort_values(
-            by="__no_numeric",
-            ascending=False
-        ).head(20)
+        ).sort_values(by="__no_numeric", ascending=False).head(20)
 
-        html = ""
-
+        html=""
         for _, r in df.iterrows():
-            html += f"""
+            html+=f"""
             <div style="font-size:12px;border-bottom:1px solid #334155;padding:6px 0;">
-            {r.iloc[COL_YEAR]} ·
-            {r.iloc[COL_ROUND]} ·
-            {r.iloc[COL_LEAGUE]} ·
+            {r.iloc[COL_YEAR]} · {r.iloc[COL_ROUND]} · {r.iloc[COL_LEAGUE]} ·
             {r.iloc[COL_HOME]} vs {r.iloc[COL_AWAY]} ·
-            {r.iloc[COL_TYPE]} ·
-            {r.iloc[COL_HOMEAWAY]} ·
-            {r.iloc[COL_GENERAL]} ·
-            {r.iloc[COL_DIR]} ·
-            {r.iloc[COL_HANDI]}
+            {r.iloc[COL_TYPE]} · {r.iloc[COL_HOMEAWAY]} ·
+            {r.iloc[COL_GENERAL]} · {r.iloc[COL_DIR]} · {r.iloc[COL_HANDI]}
             {result_circle(r.iloc[COL_RESULT], reverse)}
             </div>
             """
-
         return html if html else "<div style='font-size:12px;'>경기 없음</div>"
 
-    # =========================
-    # 데이터 계산
-    # =========================
+    # =====================================================
+    # 카드1 : 맞대결 좌우 비교
+    # =====================================================
 
     h2h_df = CURRENT_DF[
         (CURRENT_DF.iloc[:, COL_HOME] == home) &
@@ -1143,139 +1113,160 @@ def detail(
         (CURRENT_DF.iloc[:, COL_RESULT] != "경기전")
     ]
 
+    h2h_reverse_df = CURRENT_DF[
+        (CURRENT_DF.iloc[:, COL_HOME] == away) &
+        (CURRENT_DF.iloc[:, COL_AWAY] == home) &
+        (CURRENT_DF.iloc[:, COL_RESULT] != "경기전")
+    ]
+
     h2h_dist = distribution(h2h_df)
+    h2h_reverse_dist = distribution(h2h_reverse_df)
+
+    # =====================================================
+    # 카드2 : 5조건 전체 vs 동일리그
+    # =====================================================
+
+    base_df = run_filter(filtered_df, build_5cond(row))
+    base_df = base_df[base_df.iloc[:, COL_RESULT] != "경기전"]
+    base_dist = distribution(base_df)
 
     league_df = run_filter(filtered_df, build_league_cond(row))
     league_df = league_df[league_df.iloc[:, COL_RESULT] != "경기전"]
     league_dist = distribution(league_df)
 
-    # =========================
-    # 리그별 5조건 그룹 카드
-    # =========================
+    # =====================================================
+    # 카드3 : 리그별 분포
+    # =====================================================
 
-    league_group_df = run_filter(filtered_df, build_5cond(row))
-    league_group_df = league_group_df[
-        league_group_df.iloc[:, COL_RESULT] != "경기전"
-    ]
-
+    league_group_df = base_df
     league_groups = league_group_df.groupby(
         league_group_df.iloc[:, COL_LEAGUE]
     )
 
-    card2_html = ""
+    league_card_html = ""
 
     for lg, group in league_groups:
-
         dist = distribution(group)
-        list_html = match_list_html(group)
-        box_id = f"card2_{lg}"
+        box_id = f"lg_{lg}"
 
-        card2_html += f"""
+        league_card_html += f"""
         <div style="background:#1e293b;padding:16px;
         border-radius:16px;margin-top:20px;">
 
-        <h3>5조건 리그별 분포 - {lg} ({dist["총"]}경기)</h3>
+        <h3>리그별 분포 - {lg} ({dist["총"]}경기)</h3>
 
-        <div>승 {dist["wp"]}% ({dist["승"]}경기)</div>
-        {bar_html(dist["wp"],"win")}
+        <div style="font-size:12px;opacity:0.7;margin-bottom:10px;">
+        조건: 리그={lg} · {card_condition}
+        </div>
 
-        <div>무 {dist["dp"]}% ({dist["무"]}경기)</div>
-        {bar_html(dist["dp"],"draw")}
+        <div>승 {dist["wp"]}%</div>{bar_html(dist["wp"],"win")}
+        <div>무 {dist["dp"]}%</div>{bar_html(dist["dp"],"draw")}
+        <div>패 {dist["lp"]}%</div>{bar_html(dist["lp"],"lose")}
 
-        <div>패 {dist["lp"]}% ({dist["패"]}경기)</div>
-        {bar_html(dist["lp"],"lose")}
-
-        <br>
-        <button onclick="toggleBox('{box_id}')">
-        경기목록 보기/숨기기
-        </button>
-
-        <div id="{box_id}" style="display:none;margin-top:10px;">
-        {list_html}
+        <button onclick="toggleBox('{box_id}')">경기목록</button>
+        <div id="{box_id}" style="display:none;">
+        {match_list_html(group)}
         </div>
 
         </div>
         """
 
+    # =====================================================
+    # HTML
+    # =====================================================
+
     return f"""
 <html>
-<body style="background:#0f1720;
-color:white;font-family:Arial;padding:20px;">
+<body style="background:#0f1720;color:white;
+font-family:Arial;padding:20px;">
 
 <div style="display:flex;justify-content:space-between;align-items:center;">
 <h2>[{league}] {home} vs {away}</h2>
-<div>
-<a href="/page3?no={no}" style="color:#38bdf8;margin-right:10px;">팀분석</a>
-<a href="/page4?no={no}" style="color:#38bdf8;">배당분석</a>
+
+<div style="display:flex;gap:12px;">
+<a href="/page3?no={no}&away=0"
+style="color:#38bdf8;">홈팀분석</a>
+
+<a href="/page3?no={no}&away=1"
+style="color:#38bdf8;">원정팀분석</a>
+
+<a href="/page4?no={no}"
+style="color:#38bdf8;">배당분석</a>
 </div>
+
 </div>
 
 <div style="opacity:0.7;font-size:12px;margin-bottom:15px;">
-{condition_str}<br>
-배당: {odds_text}
+{card_condition}<br>배당: {odds_text}
 </div>
 
-<div style="display:flex;gap:20px;
-flex-wrap:wrap;margin-bottom:20px;">
-
-<div style="flex:1;background:#1e293b;
-padding:16px;border-radius:16px;min-width:280px;">
-
-<h3>맞대결 ({h2h_dist["총"]}경기)</h3>
-
-<div>승 {h2h_dist["wp"]}% ({h2h_dist["승"]}경기)</div>
-{bar_html(h2h_dist["wp"],"win")}
-
-<div>무 {h2h_dist["dp"]}% ({h2h_dist["무"]}경기)</div>
-{bar_html(h2h_dist["dp"],"draw")}
-
-<div>패 {h2h_dist["lp"]}% ({h2h_dist["패"]}경기)</div>
-{bar_html(h2h_dist["lp"],"lose")}
-
-<br>
-<button onclick="toggleBox('h2h_list')">
-경기목록 보기/숨기기
-</button>
-
-<div id="h2h_list" style="display:none;margin-top:10px;">
-{match_list_html(h2h_df)}
+<!-- 카드1 -->
+<div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:25px;">
+<div style="flex:1;background:#1e293b;padding:16px;border-radius:16px;">
+<h3>카드1 - 맞대결 (정방향)</h3>
+<div style="font-size:12px;opacity:0.7;">
+조건: 홈={home} · 원정={away}
+</div>
+<div>승 {h2h_dist["wp"]}%</div>{bar_html(h2h_dist["wp"],"win")}
+<div>무 {h2h_dist["dp"]}%</div>{bar_html(h2h_dist["dp"],"draw")}
+<div>패 {h2h_dist["lp"]}%</div>{bar_html(h2h_dist["lp"],"lose")}
+<button onclick="toggleBox('h1')">경기목록</button>
+<div id="h1" style="display:none;">{match_list_html(h2h_df)}</div>
 </div>
 
+<div style="flex:1;background:#1e293b;padding:16px;border-radius:16px;">
+<h3>카드1 - 맞대결 (역방향)</h3>
+<div style="font-size:12px;opacity:0.7;">
+조건: 홈={away} · 원정={home}
+</div>
+<div>승 {h2h_reverse_dist["wp"]}%</div>{bar_html(h2h_reverse_dist["wp"],"win")}
+<div>무 {h2h_reverse_dist["dp"]}%</div>{bar_html(h2h_reverse_dist["dp"],"draw")}
+<div>패 {h2h_reverse_dist["lp"]}%</div>{bar_html(h2h_reverse_dist["lp"],"lose")}
+<button onclick="toggleBox('h2')">경기목록</button>
+<div id="h2" style="display:none;">
+{match_list_html(h2h_reverse_df,True)}
+</div>
+</div>
 </div>
 
-<div style="flex:1;background:#1e293b;
-padding:16px;border-radius:16px;min-width:280px;">
+<!-- 카드2 -->
+<div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:25px;">
+<div style="flex:1;background:#1e293b;padding:16px;border-radius:16px;">
+<h3>카드2 - 5조건 전체</h3>
+<div style="font-size:12px;opacity:0.7;">
+조건: {card_condition}
+</div>
+<div>승 {base_dist["wp"]}%</div>{bar_html(base_dist["wp"],"win")}
+<div>무 {base_dist["dp"]}%</div>{bar_html(base_dist["dp"],"draw")}
+<div>패 {base_dist["lp"]}%</div>{bar_html(base_dist["lp"],"lose")}
+<button onclick="toggleBox('b1')">경기목록</button>
+<div id="b1" style="display:none;">
+{match_list_html(base_df)}
+</div>
+</div>
 
-<h3>동일리그 5조건 ({league_dist["총"]}경기)</h3>
-
-<div>승 {league_dist["wp"]}% ({league_dist["승"]}경기)</div>
-{bar_html(league_dist["wp"],"win")}
-
-<div>무 {league_dist["dp"]}% ({league_dist["무"]}경기)</div>
-{bar_html(league_dist["dp"],"draw")}
-
-<div>패 {league_dist["lp"]}% ({league_dist["패"]}경기)</div>
-{bar_html(league_dist["lp"],"lose")}
-
-<br>
-<button onclick="toggleBox('league_list')">
-경기목록 보기/숨기기
-</button>
-
-<div id="league_list" style="display:none;margin-top:10px;">
+<div style="flex:1;background:#1e293b;padding:16px;border-radius:16px;">
+<h3>카드2 - 동일리그 5조건</h3>
+<div style="font-size:12px;opacity:0.7;">
+조건: 리그={league} · {card_condition}
+</div>
+<div>승 {league_dist["wp"]}%</div>{bar_html(league_dist["wp"],"win")}
+<div>무 {league_dist["dp"]}%</div>{bar_html(league_dist["dp"],"draw")}
+<div>패 {league_dist["lp"]}%</div>{bar_html(league_dist["lp"],"lose")}
+<button onclick="toggleBox('b2')">경기목록</button>
+<div id="b2" style="display:none;">
 {match_list_html(league_df)}
 </div>
-
+</div>
 </div>
 
-</div>
-
-<button onclick="toggleBox('card2_main')">
+<!-- 카드3 -->
+<button onclick="toggleBox('lg_card')">
 5조건 리그별 분포 보기/숨기기
 </button>
 
-<div id="card2_main" style="display:none;">
-{card2_html}
+<div id="lg_card" style="display:none;">
+{league_card_html}
 </div>
 
 <br><br>
@@ -1283,12 +1274,9 @@ padding:16px;border-radius:16px;min-width:280px;">
 
 <script>
 function toggleBox(id){{
-    var el = document.getElementById(id);
-    if(el.style.display==="none"){{ 
-        el.style.display="block"; 
-    }} else {{ 
-        el.style.display="none"; 
-    }}
+    var el=document.getElementById(id);
+    if(el.style.display==="none"){{el.style.display="block";}}
+    else{{el.style.display="none";}}
 }}
 </script>
 
