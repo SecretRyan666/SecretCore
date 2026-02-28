@@ -1305,12 +1305,25 @@ def page3_view(no: str = None, away: int = 0):
     team = home_team if away == 0 else away_team
     page_title = "홈팀분석" if away == 0 else "원정팀분석"
 
-    # ============================================================
+    match_condition = (
+        f"{row.iloc[COL_TYPE]} · "
+        f"{row.iloc[COL_HOMEAWAY]} · "
+        f"{row.iloc[COL_GENERAL]} · "
+        f"{row.iloc[COL_DIR]} · "
+        f"{row.iloc[COL_HANDI]}"
+    )
+
+    odds_text = (
+        f"승 {row.iloc[COL_WIN_ODDS]} · "
+        f"무 {row.iloc[COL_DRAW_ODDS]} · "
+        f"패 {row.iloc[COL_LOSE_ODDS]}"
+    )
+
+    # ====================================================
     # 공통 함수
-    # ============================================================
+    # ====================================================
 
     def bar_html(percent, mode="win", reverse=False):
-
         if not reverse:
             color_map = {
                 "win":"linear-gradient(90deg,#3b82f6,#2563eb)",
@@ -1351,22 +1364,28 @@ def page3_view(no: str = None, away: int = 0):
             "lp":round(lose/total*100,2)
         }
 
-    def match_list_html(df):
+    def match_list_html(df, box_id):
         df = df.sort_values(by=df.columns[COL_NO], ascending=False).head(20)
         html = ""
         for _, r in df.iterrows():
             html += f"""
             <div style="font-size:12px;border-bottom:1px solid #334155;padding:6px 0;">
             {r.iloc[COL_YEAR]} · {r.iloc[COL_ROUND]} · {r.iloc[COL_LEAGUE]} ·
-            {r.iloc[COL_HOME]} vs {r.iloc[COL_AWAY]} ·
-            {r.iloc[COL_RESULT]}
+            {r.iloc[COL_HOME]} vs {r.iloc[COL_AWAY]} · {r.iloc[COL_RESULT]}
             </div>
             """
-        return html if html else "<div style='font-size:12px;'>경기 없음</div>"
+        return f"""
+        <button onclick="toggleBox('{box_id}')">경기목록 보기/숨기기</button>
+        <div id="{box_id}" style="display:none;margin-top:8px;">
+        {html if html else "경기 없음"}
+        </div>
+        """
 
-    # ============================================================
-    # 카드1 : 팀 홈 vs 팀 원정
-    # ============================================================
+    reverse_mode = (away == 1)
+
+    # ====================================================
+    # 카드1
+    # ====================================================
 
     team_home_df = CURRENT_DF[
         (CURRENT_DF.iloc[:, COL_HOME] == team) &
@@ -1381,9 +1400,9 @@ def page3_view(no: str = None, away: int = 0):
     dist_home = distribution(team_home_df)
     dist_away = distribution(team_away_df)
 
-    # ============================================================
-    # 카드2 : 팀 + 5조건 vs 팀 + 5조건 동일리그
-    # ============================================================
+    # ====================================================
+    # 카드2
+    # ====================================================
 
     team_5cond_df = CURRENT_DF[
         (
@@ -1405,9 +1424,9 @@ def page3_view(no: str = None, away: int = 0):
     dist_5cond = distribution(team_5cond_df)
     dist_5cond_league = distribution(team_5cond_league_df)
 
-    # ============================================================
-    # 카드3 : 팀 + 유형 + 홈원정 → 일반구분 그룹
-    # ============================================================
+    # ====================================================
+    # 카드3
+    # ====================================================
 
     team_general_df = CURRENT_DF[
         (
@@ -1426,71 +1445,61 @@ def page3_view(no: str = None, away: int = 0):
     general_html = ""
 
     for gen, group in general_groups:
-
         dist = distribution(group)
         box_id = f"gen_{gen}"
-
         general_html += f"""
-        <div style="background:#1e293b;padding:16px;
-        border-radius:16px;margin-top:20px;">
-
+        <div style="background:#1e293b;padding:16px;border-radius:16px;margin-top:20px;">
         <h3>카드3 - 일반 {gen} ({dist["총"]}경기)</h3>
-
         <div style="font-size:12px;opacity:0.7;margin-bottom:8px;">
-        조건: 팀={team} · 유형={row.iloc[COL_TYPE]} ·
-        {row.iloc[COL_HOMEAWAY]} · 일반={gen}
+        조건: 팀={team} · 유형={row.iloc[COL_TYPE]} · {row.iloc[COL_HOMEAWAY]} · 일반={gen}
         </div>
-
         <div>승 {dist["wp"]}% ({dist["승"]}경기)</div>
-        {bar_html(dist["wp"],"win", reverse=(away==1))}
-
+        {bar_html(dist["wp"],"win",reverse_mode)}
         <div>무 {dist["dp"]}% ({dist["무"]}경기)</div>
-        {bar_html(dist["dp"],"draw", reverse=(away==1))}
-
+        {bar_html(dist["dp"],"draw",reverse_mode)}
         <div>패 {dist["lp"]}% ({dist["패"]}경기)</div>
-        {bar_html(dist["lp"],"lose", reverse=(away==1))}
-
-        <br>
-        <button onclick="toggleBox('{box_id}')">
-        경기목록 보기/숨기기
-        </button>
-
-        <div id="{box_id}" style="display:none;margin-top:10px;">
-        {match_list_html(group)}
-        </div>
-
+        {bar_html(dist["lp"],"lose",reverse_mode)}
+        {match_list_html(group, box_id)}
         </div>
         """
 
-    # ============================================================
+    # ====================================================
     # HTML 출력
-    # ============================================================
+    # ====================================================
 
     return f"""
 <html>
-<body style="background:#0f1720;color:white;
-font-family:Arial;padding:20px;">
+<body style="background:#0f1720;color:white;font-family:Arial;padding:20px;">
 
+<div style="display:flex;justify-content:space-between;align-items:center;">
 <h2>[{league}] {home_team} vs {away_team}</h2>
-
-<div style="opacity:0.7;font-size:13px;margin-bottom:15px;">
-{page_title} - {team}<br>
-리그: {league}
+<div style="display:flex;gap:12px;">
+<a href="/page3?no={no}&away=0" style="color:#38bdf8;">홈팀분석</a>
+<a href="/page3?no={no}&away=1" style="color:#38bdf8;">원정팀분석</a>
+<a href="/page4?no={no}" style="color:#38bdf8;">배당분석</a>
+</div>
 </div>
 
-<div style="display:flex;gap:20px;flex-wrap:wrap;">
+<div style="opacity:0.7;font-size:13px;margin-bottom:15px;">
+해당경기 조건: {match_condition}<br>
+배당: {odds_text}<br>
+{page_title} - {team}
+</div>
 
+<!-- 카드1 -->
+<div style="display:flex;gap:20px;flex-wrap:wrap;">
 <div style="flex:1;background:#1e293b;padding:16px;border-radius:16px;">
 <h3>카드1 - 팀 홈 경기 ({dist_home["총"]}경기)</h3>
 <div style="font-size:12px;opacity:0.7;margin-bottom:8px;">
 조건: 유형={row.iloc[COL_TYPE]} · 팀={team} · 홈경기
 </div>
-<div>승 {dist_home["wp"]}% ({dist_home["승"]}경기)</div>
-{bar_html(dist_home["wp"],"win", reverse=(away==1))}
-<div>무 {dist_home["dp"]}% ({dist_home["무"]}경기)</div>
-{bar_html(dist_home["dp"],"draw", reverse=(away==1))}
-<div>패 {dist_home["lp"]}% ({dist_home["패"]}경기)</div>
-{bar_html(dist_home["lp"],"lose", reverse=(away==1))}
+<div>승 {dist_home["wp"]}% ({dist_home["승"]})</div>
+{bar_html(dist_home["wp"],"win",reverse_mode)}
+<div>무 {dist_home["dp"]}% ({dist_home["무"]})</div>
+{bar_html(dist_home["dp"],"draw",reverse_mode)}
+<div>패 {dist_home["lp"]}% ({dist_home["패"]})</div>
+{bar_html(dist_home["lp"],"lose",reverse_mode)}
+{match_list_html(team_home_df,"c1_home")}
 </div>
 
 <div style="flex:1;background:#1e293b;padding:16px;border-radius:16px;">
@@ -1498,61 +1507,53 @@ font-family:Arial;padding:20px;">
 <div style="font-size:12px;opacity:0.7;margin-bottom:8px;">
 조건: 유형={row.iloc[COL_TYPE]} · 팀={team} · 원정경기
 </div>
-<div>승 {dist_away["wp"]}% ({dist_away["승"]}경기)</div>
-{bar_html(dist_away["wp"],"win", reverse=(away==1))}
-<div>무 {dist_away["dp"]}% ({dist_away["무"]}경기)</div>
-{bar_html(dist_away["dp"],"draw", reverse=(away==1))}
-<div>패 {dist_away["lp"]}% ({dist_away["패"]}경기)</div>
-{bar_html(dist_away["lp"],"lose", reverse=(away==1))}
+<div>승 {dist_away["wp"]}% ({dist_away["승"]})</div>
+{bar_html(dist_away["wp"],"win",reverse_mode)}
+<div>무 {dist_away["dp"]}% ({dist_away["무"]})</div>
+{bar_html(dist_away["dp"],"draw",reverse_mode)}
+<div>패 {dist_away["lp"]}% ({dist_away["패"]})</div>
+{bar_html(dist_away["lp"],"lose",reverse_mode)}
+{match_list_html(team_away_df,"c1_away")}
 </div>
-
 </div>
 
 <br>
 
+<!-- 카드2 -->
 <div style="display:flex;gap:20px;flex-wrap:wrap;">
-
 <div style="flex:1;background:#1e293b;padding:16px;border-radius:16px;">
 <h3>카드2 - 팀 5조건 전체 ({dist_5cond["총"]}경기)</h3>
 <div style="font-size:12px;opacity:0.7;margin-bottom:8px;">
-조건: 팀={team} · 유형={row.iloc[COL_TYPE]} ·
-{row.iloc[COL_HOMEAWAY]} ·
-{row.iloc[COL_GENERAL]} ·
-{row.iloc[COL_DIR]} ·
-{row.iloc[COL_HANDI]}
+조건: 팀={team} · 5조건 전체
 </div>
-<div>승 {dist_5cond["wp"]}% ({dist_5cond["승"]}경기)</div>
-{bar_html(dist_5cond["wp"],"win", reverse=(away==1))}
-<div>무 {dist_5cond["dp"]}% ({dist_5cond["무"]}경기)</div>
-{bar_html(dist_5cond["dp"],"draw", reverse=(away==1))}
-<div>패 {dist_5cond["lp"]}% ({dist_5cond["패"]}경기)</div>
-{bar_html(dist_5cond["lp"],"lose", reverse=(away==1))}
+<div>승 {dist_5cond["wp"]}% ({dist_5cond["승"]})</div>
+{bar_html(dist_5cond["wp"],"win",reverse_mode)}
+<div>무 {dist_5cond["dp"]}% ({dist_5cond["무"]})</div>
+{bar_html(dist_5cond["dp"],"draw",reverse_mode)}
+<div>패 {dist_5cond["lp"]}% ({dist_5cond["패"]})</div>
+{bar_html(dist_5cond["lp"],"lose",reverse_mode)}
+{match_list_html(team_5cond_df,"c2_all")}
 </div>
 
 <div style="flex:1;background:#1e293b;padding:16px;border-radius:16px;">
 <h3>카드2 - 동일리그 5조건 ({dist_5cond_league["총"]}경기)</h3>
 <div style="font-size:12px;opacity:0.7;margin-bottom:8px;">
-조건: 리그={league} · 팀={team} · 동일 5조건
+조건: 팀={team} · 동일리그
 </div>
-<div>승 {dist_5cond_league["wp"]}% ({dist_5cond_league["승"]}경기)</div>
-{bar_html(dist_5cond_league["wp"],"win", reverse=(away==1))}
-<div>무 {dist_5cond_league["dp"]}% ({dist_5cond_league["무"]}경기)</div>
-{bar_html(dist_5cond_league["dp"],"draw", reverse=(away==1))}
-<div>패 {dist_5cond_league["lp"]}% ({dist_5cond_league["패"]}경기)</div>
-{bar_html(dist_5cond_league["lp"],"lose", reverse=(away==1))}
+<div>승 {dist_5cond_league["wp"]}% ({dist_5cond_league["승"]})</div>
+{bar_html(dist_5cond_league["wp"],"win",reverse_mode)}
+<div>무 {dist_5cond_league["dp"]}% ({dist_5cond_league["무"]})</div>
+{bar_html(dist_5cond_league["dp"],"draw",reverse_mode)}
+<div>패 {dist_5cond_league["lp"]}% ({dist_5cond_league["패"]})</div>
+{bar_html(dist_5cond_league["lp"],"lose",reverse_mode)}
+{match_list_html(team_5cond_league_df,"c2_league")}
 </div>
-
 </div>
 
 <br>
 
-<button onclick="toggleBox('gen')">
-카드3 - 일반구분별 보기/숨기기
-</button>
-
-<div id="gen" style="display:none;">
+<!-- 카드3 -->
 {general_html}
-</div>
 
 <br><br>
 <button onclick="history.back()">← 뒤로가기</button>
