@@ -1319,11 +1319,14 @@ def page3_view(no: str = None, away: int = 0):
         f"패 {row.iloc[COL_LOSE_ODDS]}"
     )
 
-    # ====================================================
-    # 공통 함수
-    # ====================================================
+    reverse_mode = (away == 1)
+
+    # ======================================================
+    # 공통 UI 함수
+    # ======================================================
 
     def bar_html(percent, mode="win", reverse=False):
+
         if not reverse:
             color_map = {
                 "win":"linear-gradient(90deg,#3b82f6,#2563eb)",
@@ -1347,6 +1350,32 @@ def page3_view(no: str = None, away: int = 0):
         </div>
         """
 
+    def result_circle(result, reverse=False):
+
+        if not reverse:
+            color_map = {"승":"#3b82f6","무":"#22c55e","패":"#ef4444"}
+        else:
+            color_map = {"승":"#ef4444","무":"#22c55e","패":"#3b82f6"}
+
+        color = color_map.get(result, "#64748b")
+
+        return f"""
+        <span style="
+            display:inline-flex;
+            align-items:center;
+            justify-content:center;
+            width:22px;
+            height:22px;
+            border-radius:50%;
+            background:{color};
+            color:white;
+            font-size:12px;
+            font-weight:bold;
+            margin-left:6px;">
+            {result}
+        </span>
+        """
+
     def distribution(df):
         total = len(df)
         if total == 0:
@@ -1364,28 +1393,53 @@ def page3_view(no: str = None, away: int = 0):
             "lp":round(lose/total*100,2)
         }
 
-    def match_list_html(df, box_id):
-        df = df.sort_values(by=df.columns[COL_NO], ascending=False).head(20)
+    def match_list_html(df, box_id, reverse=False):
+
+        df = df.assign(
+            __no_numeric=pd.to_numeric(df.iloc[:, COL_NO], errors="coerce")
+        ).sort_values(
+            by="__no_numeric",
+            ascending=False
+        ).head(20)
+
         html = ""
+
         for _, r in df.iterrows():
+
             html += f"""
-            <div style="font-size:12px;border-bottom:1px solid #334155;padding:6px 0;">
-            {r.iloc[COL_YEAR]} · {r.iloc[COL_ROUND]} · {r.iloc[COL_LEAGUE]} ·
-            {r.iloc[COL_HOME]} vs {r.iloc[COL_AWAY]} · {r.iloc[COL_RESULT]}
+            <div style="font-size:12px;
+            border-bottom:1px solid #334155;
+            padding:6px 0;">
+
+            {r.iloc[COL_YEAR]} ·
+            {r.iloc[COL_ROUND]} ·
+            {r.iloc[COL_LEAGUE]} ·
+
+            {r.iloc[COL_HOME]} vs {r.iloc[COL_AWAY]} ·
+
+            {r.iloc[COL_TYPE]} ·
+            {r.iloc[COL_HOMEAWAY]} ·
+            {r.iloc[COL_GENERAL]} ·
+            {r.iloc[COL_DIR]} ·
+            {r.iloc[COL_HANDI]}
+
+            {result_circle(r.iloc[COL_RESULT], reverse)}
+
             </div>
             """
+
         return f"""
-        <button onclick="toggleBox('{box_id}')">경기목록 보기/숨기기</button>
-        <div id="{box_id}" style="display:none;margin-top:8px;">
+        <button onclick="toggleBox('{box_id}')">
+        경기목록 보기/숨기기
+        </button>
+        <div id="{box_id}" style="display:none;margin-top:10px;">
         {html if html else "경기 없음"}
         </div>
         """
 
-    reverse_mode = (away == 1)
-
-    # ====================================================
+    # ======================================================
     # 카드1
-    # ====================================================
+    # ======================================================
 
     team_home_df = CURRENT_DF[
         (CURRENT_DF.iloc[:, COL_HOME] == team) &
@@ -1400,9 +1454,9 @@ def page3_view(no: str = None, away: int = 0):
     dist_home = distribution(team_home_df)
     dist_away = distribution(team_away_df)
 
-    # ====================================================
+    # ======================================================
     # 카드2
-    # ====================================================
+    # ======================================================
 
     team_5cond_df = CURRENT_DF[
         (
@@ -1424,9 +1478,9 @@ def page3_view(no: str = None, away: int = 0):
     dist_5cond = distribution(team_5cond_df)
     dist_5cond_league = distribution(team_5cond_league_df)
 
-    # ====================================================
+    # ======================================================
     # 카드3
-    # ====================================================
+    # ======================================================
 
     team_general_df = CURRENT_DF[
         (
@@ -1445,27 +1499,35 @@ def page3_view(no: str = None, away: int = 0):
     general_html = ""
 
     for gen, group in general_groups:
+
         dist = distribution(group)
         box_id = f"gen_{gen}"
+
         general_html += f"""
         <div style="background:#1e293b;padding:16px;border-radius:16px;margin-top:20px;">
+
         <h3>카드3 - 일반 {gen} ({dist["총"]}경기)</h3>
+
         <div style="font-size:12px;opacity:0.7;margin-bottom:8px;">
-        조건: 팀={team} · 유형={row.iloc[COL_TYPE]} · {row.iloc[COL_HOMEAWAY]} · 일반={gen}
+        조건: 팀={team} · 유형={row.iloc[COL_TYPE]} ·
+        {row.iloc[COL_HOMEAWAY]} · 일반={gen}
         </div>
+
         <div>승 {dist["wp"]}% ({dist["승"]}경기)</div>
         {bar_html(dist["wp"],"win",reverse_mode)}
         <div>무 {dist["dp"]}% ({dist["무"]}경기)</div>
         {bar_html(dist["dp"],"draw",reverse_mode)}
         <div>패 {dist["lp"]}% ({dist["패"]}경기)</div>
         {bar_html(dist["lp"],"lose",reverse_mode)}
-        {match_list_html(group, box_id)}
+
+        {match_list_html(group, box_id, reverse_mode)}
+
         </div>
         """
 
-    # ====================================================
+    # ======================================================
     # HTML 출력
-    # ====================================================
+    # ======================================================
 
     return f"""
 <html>
@@ -1493,13 +1555,13 @@ def page3_view(no: str = None, away: int = 0):
 <div style="font-size:12px;opacity:0.7;margin-bottom:8px;">
 조건: 유형={row.iloc[COL_TYPE]} · 팀={team} · 홈경기
 </div>
-<div>승 {dist_home["wp"]}% ({dist_home["승"]})</div>
+<div>승 {dist_home["wp"]}% ({dist_home["승"]}경기)</div>
 {bar_html(dist_home["wp"],"win",reverse_mode)}
-<div>무 {dist_home["dp"]}% ({dist_home["무"]})</div>
+<div>무 {dist_home["dp"]}% ({dist_home["무"]}경기)</div>
 {bar_html(dist_home["dp"],"draw",reverse_mode)}
-<div>패 {dist_home["lp"]}% ({dist_home["패"]})</div>
+<div>패 {dist_home["lp"]}% ({dist_home["패"]}경기)</div>
 {bar_html(dist_home["lp"],"lose",reverse_mode)}
-{match_list_html(team_home_df,"c1_home")}
+{match_list_html(team_home_df,"c1_home",reverse_mode)}
 </div>
 
 <div style="flex:1;background:#1e293b;padding:16px;border-radius:16px;">
@@ -1507,13 +1569,13 @@ def page3_view(no: str = None, away: int = 0):
 <div style="font-size:12px;opacity:0.7;margin-bottom:8px;">
 조건: 유형={row.iloc[COL_TYPE]} · 팀={team} · 원정경기
 </div>
-<div>승 {dist_away["wp"]}% ({dist_away["승"]})</div>
+<div>승 {dist_away["wp"]}% ({dist_away["승"]}경기)</div>
 {bar_html(dist_away["wp"],"win",reverse_mode)}
-<div>무 {dist_away["dp"]}% ({dist_away["무"]})</div>
+<div>무 {dist_away["dp"]}% ({dist_away["무"]}경기)</div>
 {bar_html(dist_away["dp"],"draw",reverse_mode)}
-<div>패 {dist_away["lp"]}% ({dist_away["패"]})</div>
+<div>패 {dist_away["lp"]}% ({dist_away["패"]}경기)</div>
 {bar_html(dist_away["lp"],"lose",reverse_mode)}
-{match_list_html(team_away_df,"c1_away")}
+{match_list_html(team_away_df,"c1_away",reverse_mode)}
 </div>
 </div>
 
@@ -1524,15 +1586,15 @@ def page3_view(no: str = None, away: int = 0):
 <div style="flex:1;background:#1e293b;padding:16px;border-radius:16px;">
 <h3>카드2 - 팀 5조건 전체 ({dist_5cond["총"]}경기)</h3>
 <div style="font-size:12px;opacity:0.7;margin-bottom:8px;">
-조건: 팀={team} · 5조건 전체
+조건: 팀={team} · 동일 5조건
 </div>
-<div>승 {dist_5cond["wp"]}% ({dist_5cond["승"]})</div>
+<div>승 {dist_5cond["wp"]}% ({dist_5cond["승"]}경기)</div>
 {bar_html(dist_5cond["wp"],"win",reverse_mode)}
-<div>무 {dist_5cond["dp"]}% ({dist_5cond["무"]})</div>
+<div>무 {dist_5cond["dp"]}% ({dist_5cond["무"]}경기)</div>
 {bar_html(dist_5cond["dp"],"draw",reverse_mode)}
-<div>패 {dist_5cond["lp"]}% ({dist_5cond["패"]})</div>
+<div>패 {dist_5cond["lp"]}% ({dist_5cond["패"]}경기)</div>
 {bar_html(dist_5cond["lp"],"lose",reverse_mode)}
-{match_list_html(team_5cond_df,"c2_all")}
+{match_list_html(team_5cond_df,"c2_all",reverse_mode)}
 </div>
 
 <div style="flex:1;background:#1e293b;padding:16px;border-radius:16px;">
@@ -1540,13 +1602,13 @@ def page3_view(no: str = None, away: int = 0):
 <div style="font-size:12px;opacity:0.7;margin-bottom:8px;">
 조건: 팀={team} · 동일리그
 </div>
-<div>승 {dist_5cond_league["wp"]}% ({dist_5cond_league["승"]})</div>
+<div>승 {dist_5cond_league["wp"]}% ({dist_5cond_league["승"]}경기)</div>
 {bar_html(dist_5cond_league["wp"],"win",reverse_mode)}
-<div>무 {dist_5cond_league["dp"]}% ({dist_5cond_league["무"]})</div>
+<div>무 {dist_5cond_league["dp"]}% ({dist_5cond_league["무"]}경기)</div>
 {bar_html(dist_5cond_league["dp"],"draw",reverse_mode)}
-<div>패 {dist_5cond_league["lp"]}% ({dist_5cond_league["패"]})</div>
+<div>패 {dist_5cond_league["lp"]}% ({dist_5cond_league["패"]}경기)</div>
 {bar_html(dist_5cond_league["lp"],"lose",reverse_mode)}
-{match_list_html(team_5cond_league_df,"c2_league")}
+{match_list_html(team_5cond_league_df,"c2_league",reverse_mode)}
 </div>
 </div>
 
