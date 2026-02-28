@@ -1641,7 +1641,6 @@ def page4_view(no: str = None):
 
     if not no:
         return "<h2>잘못된 접근</h2>"
-
     if CURRENT_DF.empty:
         return "<h2>데이터 없음</h2>"
 
@@ -1655,87 +1654,171 @@ def page4_view(no: str = None):
     away = row.iloc[COL_AWAY]
     league = row.iloc[COL_LEAGUE]
 
-    try:
-        win_odds  = float(row.iloc[COL_WIN_ODDS])
-        draw_odds = float(row.iloc[COL_DRAW_ODDS])
-        lose_odds = float(row.iloc[COL_LOSE_ODDS])
-    except:
-        return "<h2>배당 데이터 오류</h2>"
+    type_val = row.iloc[COL_TYPE]
+    win_odds  = row.iloc[COL_WIN_ODDS]
+    draw_odds = row.iloc[COL_DRAW_ODDS]
+    lose_odds = row.iloc[COL_LOSE_ODDS]
 
-    odds_df = CURRENT_DF[
-        (CURRENT_DF.iloc[:, COL_WIN_ODDS]  == row.iloc[COL_WIN_ODDS]) &
-        (CURRENT_DF.iloc[:, COL_DRAW_ODDS] == row.iloc[COL_DRAW_ODDS]) &
-        (CURRENT_DF.iloc[:, COL_LOSE_ODDS] == row.iloc[COL_LOSE_ODDS])
+    # =========================================================
+    # 공통 함수 (페이지3 동일)
+    # =========================================================
+
+    def distribution(df):
+        total = len(df)
+        if total == 0:
+            return {"총":0,"승":0,"무":0,"패":0,"wp":0,"dp":0,"lp":0}
+        win  = (df.iloc[:, COL_RESULT] == "승").sum()
+        draw = (df.iloc[:, COL_RESULT] == "무").sum()
+        lose = (df.iloc[:, COL_RESULT] == "패").sum()
+        return {
+            "총":total,
+            "승":win,
+            "무":draw,
+            "패":lose,
+            "wp":round(win/total*100,2),
+            "dp":round(draw/total*100,2),
+            "lp":round(lose/total*100,2)
+        }
+
+    def result_circle(result):
+        color_map = {"승":"#3b82f6","무":"#22c55e","패":"#ef4444"}
+        color = color_map.get(result, "#64748b")
+        return f"""
+        <span style="
+            display:inline-flex;
+            align-items:center;
+            justify-content:center;
+            width:22px;height:22px;
+            border-radius:50%;
+            background:{color};
+            color:white;font-size:12px;
+            font-weight:bold;margin-left:6px;">
+            {result}
+        </span>
+        """
+
+    def match_list_html(df, box_id):
+
+        df = df.assign(
+            __no_numeric=pd.to_numeric(df.iloc[:, COL_NO], errors="coerce")
+        ).sort_values(by="__no_numeric", ascending=False).head(20)
+
+        html = ""
+        for _, r in df.iterrows():
+            html += f"""
+            <div style="font-size:12px;border-bottom:1px solid #334155;padding:6px 0;">
+            {r.iloc[COL_YEAR]} · {r.iloc[COL_ROUND]} · {r.iloc[COL_LEAGUE]} ·
+            {r.iloc[COL_HOME]} vs {r.iloc[COL_AWAY]} ·
+            {r.iloc[COL_TYPE]} · {r.iloc[COL_HOMEAWAY]} ·
+            {r.iloc[COL_GENERAL]} · {r.iloc[COL_DIR]} · {r.iloc[COL_HANDI]}
+            {result_circle(r.iloc[COL_RESULT])}
+            </div>
+            """
+
+        return f"""
+        <button onclick="toggleBox('{box_id}')">경기목록</button>
+        <div id="{box_id}" style="display:none;margin-top:8px;">
+        {html if html else "경기 없음"}
+        </div>
+        """
+
+    # =========================================================
+    # 카드1 : 유형 + 승무패 완전일치
+    # =========================================================
+
+    card1_df = CURRENT_DF[
+        (CURRENT_DF.iloc[:, COL_TYPE] == type_val) &
+        (CURRENT_DF.iloc[:, COL_WIN_ODDS] == win_odds) &
+        (CURRENT_DF.iloc[:, COL_DRAW_ODDS] == draw_odds) &
+        (CURRENT_DF.iloc[:, COL_LOSE_ODDS] == lose_odds) &
+        (CURRENT_DF.iloc[:, COL_RESULT] != "경기전")
     ]
 
-    odds_df = odds_df[odds_df.iloc[:, COL_RESULT] != "경기전"]
+    dist1 = distribution(card1_df)
 
-    dist = distribution(odds_df)
-    ev_data = safe_ev(dist, row)
+    # =========================================================
+    # 카드2
+    # =========================================================
 
-    implied_total = (1/win_odds) + (1/draw_odds) + (1/lose_odds)
-    margin = round((implied_total - 1) * 100, 2)
+    card2_win_df = CURRENT_DF[
+        (CURRENT_DF.iloc[:, COL_TYPE] == type_val) &
+        (CURRENT_DF.iloc[:, COL_WIN_ODDS] == win_odds) &
+        (CURRENT_DF.iloc[:, COL_RESULT] != "경기전")
+    ]
 
-    html = f"""
+    dist2_win = distribution(card2_win_df)
+
+    # =========================================================
+    # 카드3
+    # =========================================================
+
+    card3_draw_df = CURRENT_DF[
+        (CURRENT_DF.iloc[:, COL_TYPE] == type_val) &
+        (CURRENT_DF.iloc[:, COL_DRAW_ODDS] == draw_odds) &
+        (CURRENT_DF.iloc[:, COL_RESULT] != "경기전")
+    ]
+
+    dist3_draw = distribution(card3_draw_df)
+
+    # =========================================================
+    # 카드4
+    # =========================================================
+
+    card4_lose_df = CURRENT_DF[
+        (CURRENT_DF.iloc[:, COL_TYPE] == type_val) &
+        (CURRENT_DF.iloc[:, COL_LOSE_ODDS] == lose_odds) &
+        (CURRENT_DF.iloc[:, COL_RESULT] != "경기전")
+    ]
+
+    dist4_lose = distribution(card4_lose_df)
+
+    # =========================================================
+    # HTML 출력
+    # =========================================================
+
+    return f"""
 <html>
-<body style="background:#0f1720;color:white;
-font-family:Arial;padding:30px;">
+<body style="background:#0f1720;color:white;font-family:Arial;padding:20px;">
 
-<h2>💰 배당 분석</h2>
-<h3>[{league}] {home} vs {away}</h3>
+<h2>[{league}] {home} vs {away}</h2>
 
-<button onclick="toggleBox('box1')">📊 분포 보기/숨기기</button>
-<div id="box1" style="background:#1e293b;
-padding:20px;border-radius:18px;margin-top:12px;">
-
-<h3>배당 분포 ({dist["총"]}경기)</h3>
-
-<div>승 {dist["wp"]}% ({dist["승"]}경기)</div>
-{bar_html(dist["wp"],"win")}
-
-<div>무 {dist["dp"]}% ({dist["무"]}경기)</div>
-{bar_html(dist["dp"],"draw")}
-
-<div>패 {dist["lp"]}% ({dist["패"]}경기)</div>
-{bar_html(dist["lp"],"lose")}
-
+<div style="display:flex;gap:12px;margin-bottom:10px;">
+<a href="/page3?no={no}&away=0" style="color:#38bdf8;">홈팀분석</a>
+<a href="/page3?no={no}&away=1" style="color:#38bdf8;">원정팀분석</a>
+<a href="/page4?no={no}" style="color:#38bdf8;">배당분석</a>
 </div>
 
-<br>
-
-<button onclick="toggleBox('box2')">📈 EV 보기/숨기기</button>
-<div id="box2" style="background:#1e293b;
-padding:20px;border-radius:18px;margin-top:12px;">
-
-<h3>EV 분석</h3>
-추천: <b>{ev_data["추천"]}</b><br>
-승 EV: {ev_data["EV"]["승"]}<br>
-무 EV: {ev_data["EV"]["무"]}<br>
-패 EV: {ev_data["EV"]["패"]}
-
-<br><br>
-시장 마진: {margin}%
-
+<div style="opacity:0.7;margin-bottom:20px;">
+유형: {type_val} <br>
+배당: 승 {win_odds} · 무 {draw_odds} · 패 {lose_odds}
 </div>
 
+<h3>카드1 - 유형+승무패 완전일치 ({dist1["총"]}경기)</h3>
+{match_list_html(card1_df,"c1")}
+
+<h3>카드2 - 유형+승 완전일치 ({dist2_win["총"]}경기)</h3>
+{match_list_html(card2_win_df,"c2")}
+
+<h3>카드3 - 유형+무 완전일치 ({dist3_draw["총"]}경기)</h3>
+{match_list_html(card3_draw_df,"c3")}
+
+<h3>카드4 - 유형+패 완전일치 ({dist4_lose["총"]}경기)</h3>
+{match_list_html(card4_lose_df,"c4")}
+
 <br><br>
-<button onclick="history.back()">← 뒤로</button>
+<button onclick="history.back()">← 뒤로가기</button>
 
 <script>
-function toggleBox(id) {{
-    var el = document.getElementById(id);
-    if(el.style.display==="none") {{
-        el.style.display="block";
-    }} else {{
-        el.style.display="none";
-    }}
+function toggleBox(id){{
+    var el=document.getElementById(id);
+    if(el.style.display==="none"){{el.style.display="block";}}
+    else{{el.style.display="none";}}
 }}
 </script>
 
 </body>
 </html>
 """
-    return html
 
 # =====================================================
 # 고신뢰도 시크릿픽 전용 API
