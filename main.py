@@ -1303,15 +1303,16 @@ def page3_view(no: str = None, away: int = 0):
     away_t = row.iloc[COL_AWAY]
     league = row.iloc[COL_LEAGUE]
 
-    team_name = home if away == 0 else away_t
+    # ===============================
+    # 분석 대상 팀 분기
+    # ===============================
 
-    card_condition = (
-        f"유형={row.iloc[COL_TYPE]} · "
-        f"{row.iloc[COL_HOMEAWAY]} · "
-        f"{row.iloc[COL_GENERAL]} · "
-        f"{row.iloc[COL_DIR]} · "
-        f"{row.iloc[COL_HANDI]}"
-    )
+    if away == 0:
+        team = home
+        page_title = "페이지3-1 - 홈팀 분석"
+    else:
+        team = away_t
+        page_title = "페이지3-2 - 원정팀 분석"
 
     odds_text = (
         f"승 {row.iloc[COL_WIN_ODDS]} · "
@@ -1319,9 +1320,9 @@ def page3_view(no: str = None, away: int = 0):
         f"패 {row.iloc[COL_LOSE_ODDS]}"
     )
 
-    # =====================================================
-    # 공통 UI 함수 (Page2와 동일)
-    # =====================================================
+    # ===============================
+    # 공통 UI 함수 (Page2 동일)
+    # ===============================
 
     def bar_html(percent, mode="win"):
         color_map = {
@@ -1339,9 +1340,15 @@ def page3_view(no: str = None, away: int = 0):
         </div>
         """
 
-    def result_circle(result):
-        color_map = {"승":"#3b82f6","무":"#22c55e","패":"#ef4444"}
+    def result_circle(result, reverse=False):
+
+        if not reverse:
+            color_map = {"승":"#3b82f6","무":"#22c55e","패":"#ef4444"}
+        else:
+            color_map = {"승":"#ef4444","무":"#22c55e","패":"#3b82f6"}
+
         color = color_map.get(result, "#64748b")
+
         return f"""
         <span style="display:inline-flex;
         align-items:center;justify-content:center;
@@ -1351,42 +1358,51 @@ def page3_view(no: str = None, away: int = 0):
         {result}</span>
         """
 
-    def match_list_html(df):
+    def match_list_html(df, reverse=False):
+
         df = df.assign(
             __no_numeric=pd.to_numeric(df.iloc[:, COL_NO], errors="coerce")
         ).sort_values(by="__no_numeric", ascending=False).head(20)
 
-        html=""
+        html = ""
+
         for _, r in df.iterrows():
-            html+=f"""
+            html += f"""
             <div style="font-size:12px;border-bottom:1px solid #334155;padding:6px 0;">
             {r.iloc[COL_YEAR]} · {r.iloc[COL_ROUND]} · {r.iloc[COL_LEAGUE]} ·
             {r.iloc[COL_HOME]} vs {r.iloc[COL_AWAY]} ·
             유형={r.iloc[COL_TYPE]} · {r.iloc[COL_HOMEAWAY]} ·
             {r.iloc[COL_GENERAL]} · {r.iloc[COL_DIR]} · {r.iloc[COL_HANDI]}
-            {result_circle(r.iloc[COL_RESULT])}
+            {result_circle(r.iloc[COL_RESULT], reverse)}
             </div>
             """
+
         return html if html else "<div style='font-size:12px;'>경기 없음</div>"
 
-    # =====================================================
-    # 카드1 좌우 비교 (유형 + 팀 기준)
-    # =====================================================
+    # ===============================
+    # 카드1 좌우 비교
+    # ===============================
 
+    # 좌측 : 해당 팀이 홈일 때
     left_df = CURRENT_DF[
-        (CURRENT_DF.iloc[:, COL_HOME] == home) &
+        (CURRENT_DF.iloc[:, COL_HOME] == team) &
         (CURRENT_DF.iloc[:, COL_TYPE] == row.iloc[COL_TYPE]) &
         (CURRENT_DF.iloc[:, COL_RESULT] != "경기전")
     ]
 
+    # 우측 : 해당 팀이 원정일 때
     right_df = CURRENT_DF[
-        (CURRENT_DF.iloc[:, COL_AWAY] == away_t) &
+        (CURRENT_DF.iloc[:, COL_AWAY] == team) &
         (CURRENT_DF.iloc[:, COL_TYPE] == row.iloc[COL_TYPE]) &
         (CURRENT_DF.iloc[:, COL_RESULT] != "경기전")
     ]
 
     left_dist = distribution(left_df)
     right_dist = distribution(right_df)
+
+    # ===============================
+    # HTML 출력
+    # ===============================
 
     return f"""
 <html>
@@ -1405,13 +1421,15 @@ font-family:Arial;padding:20px;">
 </div>
 
 <div style="opacity:0.7;font-size:12px;margin-bottom:15px;">
-{card_condition}<br>배당: {odds_text}
+유형={row.iloc[COL_TYPE]} · {row.iloc[COL_HOMEAWAY]} ·
+{row.iloc[COL_GENERAL]} · {row.iloc[COL_DIR]} · {row.iloc[COL_HANDI]}<br>
+배당: {odds_text}
 </div>
 
-<!-- Page3 전용 헤더 -->
-<h3>페이지3 - 팀분석</h3>
+<!-- Page3 전용 -->
+<h3>{page_title}</h3>
 <div style="font-size:12px;opacity:0.7;margin-bottom:20px;">
-조건: 유형={row.iloc[COL_TYPE]} · 팀={team_name}<br>
+조건: 유형={row.iloc[COL_TYPE]} · 팀={team}<br>
 리그: {league}
 </div>
 
@@ -1419,9 +1437,9 @@ font-family:Arial;padding:20px;">
 <div style="display:flex;gap:20px;flex-wrap:wrap;">
 
 <div style="flex:1;background:#1e293b;padding:16px;border-radius:16px;">
-<h3>카드1 - 홈팀 기준  총 ({left_dist["총"]}경기)</h3>
+<h3>카드1 - 팀이 홈일 때  총 ({left_dist["총"]}경기)</h3>
 <div style="font-size:12px;opacity:0.7;">
-조건: 유형={row.iloc[COL_TYPE]} · 팀={home}
+조건: 유형={row.iloc[COL_TYPE]} · 팀={team} (홈)
 </div>
 
 <div>승 {left_dist["wp"]}% ({left_dist["승"]}경기)</div>{bar_html(left_dist["wp"],"win")}
@@ -1430,14 +1448,14 @@ font-family:Arial;padding:20px;">
 
 <button onclick="toggleBox('l1')">경기목록</button>
 <div id="l1" style="display:none;">
-{match_list_html(left_df)}
+{match_list_html(left_df, False)}
 </div>
 </div>
 
 <div style="flex:1;background:#1e293b;padding:16px;border-radius:16px;">
-<h3>카드1 - 원정팀 기준  총 ({right_dist["총"]}경기)</h3>
+<h3>카드1 - 팀이 원정일 때  총 ({right_dist["총"]}경기)</h3>
 <div style="font-size:12px;opacity:0.7;">
-조건: 유형={row.iloc[COL_TYPE]} · 팀={away_t}
+조건: 유형={row.iloc[COL_TYPE]} · 팀={team} (원정)
 </div>
 
 <div>승 {right_dist["wp"]}% ({right_dist["승"]}경기)</div>{bar_html(right_dist["wp"],"win")}
@@ -1446,7 +1464,7 @@ font-family:Arial;padding:20px;">
 
 <button onclick="toggleBox('r1')">경기목록</button>
 <div id="r1" style="display:none;">
-{match_list_html(right_df)}
+{match_list_html(right_df, True)}
 </div>
 </div>
 
